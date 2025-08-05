@@ -415,11 +415,11 @@ const App = () => {
                 Por: Javier Valverde Salvatierra
             </p>
 
-            {/* Contenedor principal de la aplicación - Ahora usa flex-wrap para el ordenamiento */}
-            <div className="bg-white p-6 rounded-xl shadow-lg w-full max-w-4xl flex flex-wrap gap-6">
+            {/* Contenedor principal de la aplicación - Ahora usa flex-col en móvil y flex-row en desktop */}
+            <div className="bg-white p-6 rounded-xl shadow-lg w-full max-w-4xl flex flex-col lg:flex-row gap-6">
 
-                {/* Sección de controles - Orden 1 en móvil y desktop */}
-                <div className="flex-1 flex flex-col gap-4 order-1 lg:order-1 min-w-[300px]"> {/* min-w para asegurar espacio */}
+                {/* Sección de controles - Ocupa todo el ancho en móvil, mitad en desktop */}
+                <div className="w-full lg:w-1/2 flex flex-col gap-4">
                     <h2 className="text-xl font-semibold text-gray-700 mb-2">1. Sube tus imágenes</h2>
 
                     {/* Carga de imagen base */}
@@ -513,15 +513,12 @@ const App = () => {
                             </p>
                         )}
                     </div>
-                    {/* Botón de Reiniciar */}
+                    {/* Botón de Reiniciar (sin SVG para evitar truncamiento) */}
                     <button
                         onClick={handleReset}
                         className="mt-4 w-full bg-gray-400 hover:bg-gray-500 text-white font-bold py-3 px-6 rounded-full shadow-md
-                                   transition duration-300 ease-in-out transform hover:scale-105 flex items-center justify-center gap-2"
+                                   transition duration-300 ease-in-out transform hover:scale-105"
                     >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
-                        </svg>
                         Reiniciar
                     </button>
 
@@ -546,8 +543,8 @@ const App = () => {
                     )}
                 </div>
 
-                {/* Sección de Canvas - Orden 2 en móvil y desktop */}
-                <div className="flex-1 flex justify-center items-center bg-gray-100 rounded-lg shadow-inner overflow-hidden order-2 lg:order-2 min-h-[300px] border border-gray-300">
+                {/* Sección de Canvas - Ocupa todo el ancho en móvil, mitad en desktop */}
+                <div className="w-full lg:w-1/2 flex justify-center items-center bg-gray-100 rounded-lg shadow-inner overflow-hidden min-h-[300px] border border-gray-300">
                     <canvas
                         ref={canvasRef}
                         className="max-w-full h-auto rounded-lg"
@@ -567,3 +564,4 @@ const App = () => {
 };
 
 export default App;
+
