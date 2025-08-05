@@ -4,7 +4,8 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 const App = () => {
     // Estados para las imágenes y sus propiedades
     const [baseImageSrc, setBaseImageSrc] = useState(null); // URL de la imagen base
-    const [watermarks, setWatermarks] = useState([]); // [{ id, src, obj, x, y, scale }]
+    const [baseImageName, setBaseImageName] = useState(null); // Nombre del archivo de la imagen base
+    const [watermarks, setWatermarks] = useState([]); // [{ id, src, obj, x, y, scale, name }]
     const [nextWatermarkId, setNextWatermarkId] = useState(0); // Para generar IDs únicos para las marcas de agua
     const [activeWatermarkId, setActiveWatermarkId] = useState(null); // ID de la marca de agua actualmente seleccionada
     const [loading, setLoading] = useState(false); // Estado de carga
@@ -17,8 +18,11 @@ const App = () => {
     const [initialWatermarkX, setInitialWatermarkX] = useState(0);
     const [initialWatermarkY, setInitialWatermarkY] = useState(0);
 
-    // Referencias al elemento canvas y a las dimensiones de las marcas de agua dibujadas
+    // Referencias al elemento canvas y a los inputs de archivo
     const canvasRef = useRef(null);
+    const baseImageInputRef = useRef(null); // Referencia para el input de la imagen base
+    const watermarkInputRef = useRef(null); // Referencia para el input de la marca de agua
+
     // Usamos un Map para almacenar los límites de cada marca de agua por su ID
     const allWatermarkBounds = useRef(new Map());
 
@@ -125,6 +129,7 @@ const App = () => {
             const reader = new FileReader();
             reader.onloadend = () => {
                 setBaseImageSrc(reader.result);
+                setBaseImageName(file.name); // Guardar el nombre del archivo
                 setWatermarks([]); // Limpiar marcas de agua al cargar nueva imagen base
                 setActiveWatermarkId(null);
                 setNextWatermarkId(0);
@@ -152,6 +157,7 @@ const App = () => {
                         x: 0, // Posición inicial
                         y: 0, // Posición inicial
                         scale: 0.3, // Escala inicial
+                        name: file.name, // Guardar el nombre del archivo de la marca de agua
                     };
                     setWatermarks(prev => [...prev, newWatermark]);
                     setActiveWatermarkId(newWatermark.id); // Seleccionar la marca de agua recién añadida
@@ -169,11 +175,12 @@ const App = () => {
 
     // --- Funciones para arrastrar la marca de agua ---
 
+    // Función para obtener las coordenadas del evento (ratón o toque) escaladas al tamaño interno del canvas
     const getEventCoords = (event) => {
         const canvas = canvasRef.current;
-        const rect = canvas.getBoundingClientRect();
-        let clientX, clientY;
+        const rect = canvas.getBoundingClientRect(); // Dimensiones del canvas en la pantalla (CSS)
 
+        let clientX, clientY;
         if (event.touches && event.touches.length > 0) {
             clientX = event.touches[0].clientX;
             clientY = event.touches[0].clientY;
@@ -182,9 +189,18 @@ const App = () => {
             clientY = event.clientY;
         }
 
+        // Calcular las coordenadas relativas al canvas (en píxeles CSS)
+        const xCss = clientX - rect.left;
+        const yCss = clientY - rect.top;
+
+        // Calcular el factor de escala entre el tamaño CSS del canvas y su tamaño interno (HTML attributes)
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+
+        // Escalar las coordenadas CSS a las coordenadas internas del canvas
         return {
-            x: clientX - rect.left,
-            y: clientY - rect.top,
+            x: xCss * scaleX,
+            y: yCss * scaleY,
         };
     };
 
@@ -195,6 +211,7 @@ const App = () => {
 
         let clickedWatermarkId = null;
         // Iterar las marcas de agua en orden inverso para seleccionar la superior si se superponen
+        // Usamos Array.from(Map.entries()) para poder iterar en orden inverso
         const watermarksArray = Array.from(allWatermarkBounds.current.entries());
         for (let i = watermarksArray.length - 1; i >= 0; i--) {
             const [id, bounds] = watermarksArray[i];
@@ -210,8 +227,8 @@ const App = () => {
         if (clickedWatermarkId !== null) {
             setActiveWatermarkId(clickedWatermarkId);
             setIsDragging(true);
-            setDragStartX(x);
-            setDragStartY(y);
+            setDragStartX(x); // Guardar coordenadas escaladas
+            setDragStartY(y); // Guardar coordenadas escaladas
             const activeWatermark = watermarks.find(w => w.id === clickedWatermarkId);
             if (activeWatermark) {
                 setInitialWatermarkX(activeWatermark.x);
@@ -228,7 +245,7 @@ const App = () => {
         if (!isDragging || activeWatermarkId === null) return;
         event.preventDefault(); // Prevenir el desplazamiento en dispositivos táctiles
 
-        const { x, y } = getEventCoords(event);
+        const { x, y } = getEventCoords(event); // Obtener coordenadas escaladas
         const canvas = canvasRef.current;
 
         const dx = x - dragStartX;
@@ -260,6 +277,7 @@ const App = () => {
     };
 
     // --- Fin de funciones para arrastrar la marca de agua ---
+
 
     // Función para manejar el cambio de escala de la marca de agua activa
     const handleWatermarkScaleChange = (e) => {
@@ -302,7 +320,7 @@ const App = () => {
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-blue-100 to-purple-200 p-4 sm:p-6 flex flex-col items-center font-sans">
-            
+            {/* Tailwind CSS y Google Fonts ya están en public/index.html */}
             <style>
                 {`
                 body {
@@ -345,21 +363,18 @@ const App = () => {
 
             <h1 className="text-3xl sm:text-4xl font-bold text-indigo-800 mb-6 text-center">
                 Editor de Imágenes con Marca de Agua
-                <p className="text-xl text-gray-500 mt-1">
-                            Por: Javier Valverde S.
-                </p>
             </h1>
 
-            {/* Contenedor principal de la aplicación */}
-            <div className="bg-white p-6 rounded-xl shadow-lg w-full max-w-4xl flex flex-col lg:flex-row gap-6">
+            {/* Contenedor principal de la aplicación - Ahora usa flex-wrap para el ordenamiento */}
+            <div className="bg-white p-6 rounded-xl shadow-lg w-full max-w-4xl flex flex-wrap gap-6">
 
-                {/* Sección de controles */}
-                <div className="flex-1 flex flex-col gap-4">
+                {/* Sección de controles - Orden 1 en móvil y desktop */}
+                <div className="flex-1 flex flex-col gap-4 order-1 lg:order-1 min-w-[300px]"> {/* min-w para asegurar espacio */}
                     <h2 className="text-xl font-semibold text-gray-700 mb-2">1. Sube tus imágenes</h2>
 
                     {/* Carga de imagen base */}
                     <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-200">
-                        <label htmlFor="baseImage" className="block text-gray-700 text-sm font-medium mb-2">
+                        <label className="block text-gray-700 text-sm font-medium mb-2">
                             Imagen Base:
                         </label>
                         <input
@@ -367,18 +382,25 @@ const App = () => {
                             id="baseImage"
                             accept="image/*"
                             onChange={handleBaseImageUpload}
-                            className="block w-full text-sm text-gray-500
-                                file:mr-4 file:py-2 file:px-4
-                                file:rounded-full file:border-0
-                                file:text-sm file:font-semibold
-                                file:bg-indigo-100 file:text-indigo-700
-                                hover:file:bg-indigo-200"
+                            className="hidden" // Ocultar el input nativo
+                            ref={baseImageInputRef}
                         />
+                        <button
+                            onClick={() => baseImageInputRef.current.click()}
+                            className="w-full py-2 px-4 rounded-full border-0 text-sm font-semibold
+                                       bg-indigo-100 text-indigo-700 hover:bg-indigo-200
+                                       transition duration-300 ease-in-out transform hover:scale-105"
+                        >
+                            Seleccionar Imagen Base
+                        </button>
+                        <p className="mt-2 text-sm text-gray-600">
+                            {baseImageName ? `Archivo seleccionado: ${baseImageName}` : 'Ningún archivo seleccionado'}
+                        </p>
                     </div>
 
                     {/* Carga de imagen de marca de agua */}
                     <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
-                        <label htmlFor="addWatermark" className="block text-gray-700 text-sm font-medium mb-2">
+                        <label className="block text-gray-700 text-sm font-medium mb-2">
                             Añadir Marca de Agua:
                         </label>
                         <input
@@ -386,15 +408,19 @@ const App = () => {
                             id="addWatermark"
                             accept="image/*"
                             onChange={handleAddWatermark}
-                            className="block w-full text-sm text-gray-500
-                                file:mr-4 file:py-2 file:px-4
-                                file:rounded-full file:border-0
-                                file:text-sm file:font-semibold
-                                file:bg-purple-100 file:text-purple-700
-                                hover:file:bg-purple-200"
-                            key={nextWatermarkId} // Cambiar la clave para forzar la recreación del input y limpiar el valor
+                            className="hidden" // Ocultar el input nativo
+                            ref={watermarkInputRef} // Ref para el input de marca de agua
+                            key={nextWatermarkId} // Para limpiar el input después de seleccionar un archivo
                         />
-                         <p className="text-xs text-gray-500 mt-1">
+                        <button
+                            onClick={() => watermarkInputRef.current.click()}
+                            className="w-full py-2 px-4 rounded-full border-0 text-sm font-semibold
+                                       bg-purple-100 text-purple-700 hover:bg-purple-200
+                                       transition duration-300 ease-in-out transform hover:scale-105"
+                        >
+                            Seleccionar Marca de Agua
+                        </button>
+                        <p className="text-xs text-gray-500 mt-1">
                             Sube una imagen para añadirla como marca de agua.
                         </p>
                     </div>
@@ -437,8 +463,31 @@ const App = () => {
                             </p>
                         )}
                     </div>
+                </div>
 
-                    {/* Botón de descarga */}
+                {/* Sección de visualización del canvas - Orden 2 en móvil y desktop */}
+                <div className="flex-1 flex justify-center items-center bg-gray-100 rounded-xl shadow-inner p-2 overflow-hidden order-2 lg:order-2 min-w-[300px]"> {/* min-w para asegurar espacio */}
+                    <canvas
+                        ref={canvasRef}
+                        className={`max-w-full h-auto rounded-lg border border-gray-300 shadow-md ${baseImageSrc && watermarks.length > 0 && !loading ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                        // Eventos para arrastrar la marca de agua
+                        onMouseDown={handleInteractionStart}
+                        onMouseMove={handleInteractionMove}
+                        onMouseUp={handleInteractionEnd}
+                        onMouseLeave={handleInteractionEnd}
+                        onTouchStart={handleInteractionStart}
+                        onTouchMove={handleInteractionMove}
+                        onTouchEnd={handleInteractionEnd}
+                        // Estilos iniciales, se ajustarán con JS
+                        width="600"
+                        height="400"
+                    >
+                        Tu navegador no soporta el elemento canvas.
+                    </canvas>
+                </div>
+
+                {/* Botón de descarga y mensajes de error - Ahora es un elemento de ancho completo y orden 3 */}
+                <div className="w-full order-3 lg:order-3">
                     <button
                         onClick={downloadImage}
                         disabled={!baseImageSrc || loading}
@@ -468,27 +517,6 @@ const App = () => {
                             {error}
                         </div>
                     )}
-                </div>
-
-                {/* Sección de visualización del canvas */}
-                <div className="flex-1 flex justify-center items-center bg-gray-100 rounded-xl shadow-inner p-2 overflow-hidden">
-                    <canvas
-                        ref={canvasRef}
-                        className={`max-w-full h-auto rounded-lg border border-gray-300 shadow-md ${baseImageSrc && watermarks.length > 0 && !loading ? 'cursor-grab active:cursor-grabbing' : ''}`}
-                        // Eventos para arrastrar la marca de agua
-                        onMouseDown={handleInteractionStart}
-                        onMouseMove={handleInteractionMove}
-                        onMouseUp={handleInteractionEnd}
-                        onMouseLeave={handleInteractionEnd}
-                        onTouchStart={handleInteractionStart}
-                        onTouchMove={handleInteractionMove}
-                        onTouchEnd={handleInteractionEnd}
-                        // Estilos iniciales, se ajustarán con JS
-                        width="600"
-                        height="400"
-                    >
-                        Tu navegador no soporta el elemento canvas.
-                    </canvas>
                 </div>
             </div>
         </div>
