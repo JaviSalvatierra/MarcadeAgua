@@ -37,7 +37,7 @@ const App = () => {
     }, []);
 
     // Función para dibujar las imágenes en el canvas
-    const drawImagesOnCanvas = useCallback(async () => {
+    const drawImagesOnCanvas = useCallback(async (drawSelectionBorder = true) => {
         const canvas = canvasRef.current;
         if (!canvas) return;
 
@@ -87,8 +87,8 @@ const App = () => {
                         height: scaledWatermarkHeight,
                     });
 
-                    // Dibujar un borde si esta es la marca de agua activa
-                    if (activeWatermarkId === watermark.id) {
+                    // Dibujar un borde si esta es la marca de agua activa Y si se debe dibujar el borde de selección
+                    if (drawSelectionBorder && activeWatermarkId === watermark.id) {
                         ctx.strokeStyle = '#6366f1'; // Tailwind indigo-500
                         ctx.lineWidth = 3;
                         ctx.strokeRect(actualX, actualY, scaledWatermarkWidth, scaledWatermarkHeight);
@@ -194,8 +194,9 @@ const App = () => {
         const yCss = clientY - rect.top;
 
         // Calcular el factor de escala entre el tamaño CSS del canvas y su tamaño interno (HTML attributes)
-        const scaleX = canvas.width / rect.width;
-        const scaleY = canvas.height / rect.height;
+        // Usamos offsetWidth/offsetHeight para obtener el tamaño renderizado del canvas
+        const scaleX = canvas.width / canvas.offsetWidth;
+        const scaleY = canvas.height / canvas.offsetHeight;
 
         // Escalar las coordenadas CSS a las coordenadas internas del canvas
         return {
@@ -308,14 +309,60 @@ const App = () => {
     // Función para descargar la imagen combinada
     const downloadImage = () => {
         const canvas = canvasRef.current;
-        if (canvas) {
+        if (!canvas || !baseImageSrc) {
+            setError("Sube una imagen base antes de descargar.");
+            return;
+        }
+
+        // Crear un canvas temporal para el guardado sin el borde de selección
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = canvas.width;
+        tempCanvas.height = canvas.height;
+        const tempCtx = tempCanvas.getContext('2d');
+
+        // Redibujar la imagen base
+        const baseImage = new Image();
+        baseImage.onload = () => {
+            tempCtx.drawImage(baseImage, 0, 0, tempCanvas.width, tempCanvas.height);
+
+            // Redibujar todas las marcas de agua (sin el borde de selección)
+            for (const watermark of watermarks) {
+                if (watermark.obj) {
+                    const scaledWatermarkWidth = watermark.obj.width * watermark.scale;
+                    const scaledWatermarkHeight = watermark.obj.height * watermark.scale;
+                    const actualX = Math.max(0, Math.min(watermark.x, tempCanvas.width - scaledWatermarkWidth));
+                    const actualY = Math.max(0, Math.min(watermark.y, tempCanvas.height - scaledWatermarkHeight));
+                    tempCtx.drawImage(watermark.obj, actualX, actualY, scaledWatermarkWidth, scaledWatermarkHeight);
+                }
+            }
+
+            // Descargar la imagen del canvas temporal
             const link = document.createElement('a');
             link.download = 'imagen_con_marcas_de_agua.png';
-            link.href = canvas.toDataURL('image/png');
+            link.href = tempCanvas.toDataURL('image/png');
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-        }
+            setError(null); // Limpiar cualquier error anterior
+        };
+        baseImage.onerror = () => {
+            setError("Error al cargar la imagen base para la descarga.");
+        };
+        baseImage.src = baseImageSrc;
+    };
+
+    // Función para reiniciar la aplicación a su estado inicial
+    const handleReset = () => {
+        setBaseImageSrc(null);
+        setBaseImageName(null);
+        setWatermarks([]);
+        setNextWatermarkId(0);
+        setActiveWatermarkId(null);
+        setLoading(false);
+        setError(null);
+        // Opcional: Limpiar los inputs de archivo si es necesario, aunque key={nextWatermarkId} ya ayuda
+        if (baseImageInputRef.current) baseImageInputRef.current.value = '';
+        if (watermarkInputRef.current) watermarkInputRef.current.value = '';
     };
 
     return (
@@ -466,60 +513,53 @@ const App = () => {
                             </p>
                         )}
                     </div>
+                    {/* Botón de Reiniciar */}
+                    <button
+                        onClick={handleReset}
+                        className="mt-4 w-full bg-gray-400 hover:bg-gray-500 text-white font-bold py-3 px-6 rounded-full shadow-md
+                                   transition duration-300 ease-in-out transform hover:scale-105 flex items-center justify-center gap-2"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+                        </svg>
+                        Reiniciar
+                    </button>
+
+                    {/* Botón de Descargar */}
+                    <button
+                        onClick={downloadImage}
+                        className="mt-4 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-full shadow-md
+                                   transition duration-300 ease-in-out transform hover:scale-105 flex items-center justify-center gap-2"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 9.414V13a1 1 0 11-2 0V9.414L6.707 10.293a1 1 0 01-1.414-1.414z" clipRule="evenodd" />
+                        </svg>
+                        Descargar Imagen
+                    </button>
+
+                    {/* Mensajes de carga y error */}
+                    {loading && (
+                        <p className="text-center text-indigo-500 mt-4">Cargando...</p>
+                    )}
+                    {error && (
+                        <p className="text-center text-red-500 mt-4">{error}</p>
+                    )}
                 </div>
 
-                {/* Sección de visualización del canvas - Orden 2 en móvil y desktop */}
-                <div className="flex-1 flex justify-center items-center bg-gray-100 rounded-xl shadow-inner p-2 overflow-hidden order-2 lg:order-2 min-w-[300px]"> {/* min-w para asegurar espacio */}
+                {/* Sección de Canvas - Orden 2 en móvil y desktop */}
+                <div className="flex-1 flex justify-center items-center bg-gray-100 rounded-lg shadow-inner overflow-hidden order-2 lg:order-2 min-h-[300px] border border-gray-300">
                     <canvas
                         ref={canvasRef}
-                        className={`max-w-full h-auto rounded-lg border border-gray-300 shadow-md ${baseImageSrc && watermarks.length > 0 && !loading ? 'cursor-grab active:cursor-grabbing' : ''}`}
-                        // Eventos para arrastrar la marca de agua
+                        className="max-w-full h-auto rounded-lg"
                         onMouseDown={handleInteractionStart}
                         onMouseMove={handleInteractionMove}
                         onMouseUp={handleInteractionEnd}
-                        onMouseLeave={handleInteractionEnd}
+                        onMouseLeave={handleInteractionEnd} // Terminar arrastre si el ratón sale del canvas
                         onTouchStart={handleInteractionStart}
                         onTouchMove={handleInteractionMove}
                         onTouchEnd={handleInteractionEnd}
-                        // Estilos iniciales, se ajustarán con JS
-                        width="600"
-                        height="400"
-                    >
-                        Tu navegador no soporta el elemento canvas.
-                    </canvas>
-                </div>
-
-                {/* Botón de descarga y mensajes de error - Ahora es un elemento de ancho completo y orden 3 */}
-                <div className="w-full order-3 lg:order-3">
-                    <button
-                        onClick={downloadImage}
-                        disabled={!baseImageSrc || loading}
-                        className="mt-6 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-full shadow-md
-                                   transition duration-300 ease-in-out transform hover:scale-105
-                                   disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                    >
-                        {loading ? (
-                            <>
-                                <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                </svg>
-                                Procesando...
-                            </>
-                        ) : (
-                            <>
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                    <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
-                                </svg>
-                                Descargar Imagen
-                            </>
-                        )}
-                    </button>
-                    {error && (
-                        <div className="mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm text-center">
-                            {error}
-                        </div>
-                    )}
+                        onTouchCancel={handleInteractionEnd}
+                    ></canvas>
                 </div>
             </div>
         </div>
