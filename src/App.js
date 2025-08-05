@@ -361,9 +361,12 @@ const App = () => {
                 `}
             </style>
 
-            <h1 className="text-3xl sm:text-4xl font-bold text-indigo-800 mb-6 text-center">
+            <h1 className="text-3xl sm:text-4xl font-bold text-indigo-800 mb-2 text-center">
                 Editor de Imágenes con Marca de Agua
             </h1>
+            <p className="text-lg text-indigo-600 mb-6 text-center">
+                Por: Javier Valverde Salvatierra
+            </p>
 
             {/* Contenedor principal de la aplicación - Ahora usa flex-wrap para el ordenamiento */}
             <div className="bg-white p-6 rounded-xl shadow-lg w-full max-w-4xl flex flex-wrap gap-6">
