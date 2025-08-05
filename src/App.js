@@ -19,7 +19,7 @@ const App = () => {
     const [initialWatermarkY, setInitialWatermarkY] = useState(0);
 
     // Referencias al elemento canvas y a los inputs de archivo
-    const canvasRef = useRef(null);
+    const canvasRef = useRef(null); // Esta ref se usará para ambos canvas, el visible en cada momento
     const baseImageInputRef = useRef(null); // Referencia para el input de la imagen base
     const watermarkInputRef = useRef(null); // Referencia para el input de la marca de agua
 
@@ -52,11 +52,12 @@ const App = () => {
             let baseImage = null;
             if (baseImageSrc) {
                 baseImage = await loadImage(baseImageSrc);
+                // Establecer las dimensiones del canvas a las dimensiones de la imagen base
                 canvas.width = baseImage.width;
                 canvas.height = baseImage.height;
                 ctx.drawImage(baseImage, 0, 0); // Dibujar la imagen base
             } else {
-                // Si no hay imagen base, establecer un tamaño predeterminado o un mensaje
+                // Tamaño predeterminado del canvas si no hay imagen base
                 canvas.width = 600;
                 canvas.height = 400;
                 ctx.fillStyle = '#f0f0f0';
@@ -121,6 +122,26 @@ const App = () => {
     useEffect(() => {
         drawImagesOnCanvas();
     }, [drawImagesOnCanvas]); // Dependencia del useCallback
+
+    // Efecto para manejar el redimensionamiento del canvas
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        const resizeCanvas = () => {
+            // Redibujar el contenido cuando el tamaño del canvas cambie
+            drawImagesOnCanvas();
+        };
+
+        // Usar ResizeObserver para un redimensionamiento más eficiente del canvas
+        const resizeObserver = new ResizeObserver(resizeCanvas);
+        resizeObserver.observe(canvas);
+
+        return () => {
+            resizeObserver.unobserve(canvas);
+        };
+    }, [drawImagesOnCanvas]);
+
 
     // Función para manejar la carga de la imagen base
     const handleBaseImageUpload = (event) => {
@@ -323,7 +344,7 @@ const App = () => {
         // Redibujar la imagen base
         const baseImage = new Image();
         baseImage.onload = () => {
-            tempCtx.drawImage(baseImage, 0, 0, tempCanvas.width, tempCanvas.height);
+            tempCtx.drawImage(baseImage, 0, 0, tempCanvas.width, tempCtx.height);
 
             // Redibujar todas las marcas de agua (sin el borde de selección)
             for (const watermark of watermarks) {
@@ -416,150 +437,162 @@ const App = () => {
             </p>
 
             {/* Contenedor principal de la aplicación */}
-            <div className="bg-white p-6 rounded-xl shadow-lg w-full max-w-4xl">
-                {/* Contenedor que maneja el layout de dos columnas en desktop, pero se apila en móvil */}
-                <div className="flex flex-col gap-6 lg:flex-row">
+            <div className="bg-white p-6 rounded-xl shadow-lg w-full max-w-4xl flex flex-col md:flex-row gap-6">
 
-                    {/* Sección de controles - Ocupa todo el ancho en móvil, mitad en desktop */}
-                    <div className="w-full lg:w-1/2 flex flex-col gap-4">
-                        <h2 className="text-xl font-semibold text-gray-700 mb-2">1. Sube tus imágenes</h2>
+                {/* Columna de Controles (parte izquierda en desktop, apilada en móvil) */}
+                <div className="w-full md:w-1/2 flex flex-col gap-4">
+                    <h2 className="text-xl font-semibold text-gray-700 mb-2">1. Sube tus imágenes</h2>
 
-                        {/* Carga de imagen base */}
-                        <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-200">
-                            <label className="block text-gray-700 text-sm font-medium mb-2">
-                                Imagen Base:
-                            </label>
-                            <input
-                                type="file"
-                                id="baseImage"
-                                accept="image/*"
-                                onChange={handleBaseImageUpload}
-                                className="hidden" // Ocultar el input nativo
-                                ref={baseImageInputRef}
-                            />
-                            <button
-                                onClick={() => baseImageInputRef.current.click()}
-                                className="w-full py-2 px-4 rounded-full border-0 text-sm font-semibold
-                                           bg-indigo-100 text-indigo-700 hover:bg-indigo-200
-                                           transition duration-300 ease-in-out transform hover:scale-105"
-                            >
-                                Seleccionar Imagen Base
-                            </button>
-                            <p className="mt-2 text-sm text-gray-600">
-                                {baseImageName ? `Archivo seleccionado: ${baseImageName}` : 'Ningún archivo seleccionado'}
-                            </p>
-                        </div>
-
-                        {/* Carga de imagen de marca de agua */}
-                        <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
-                            <label className="block text-gray-700 text-sm font-medium mb-2">
-                                Añadir Marca de Agua:
-                            </label>
-                            <input
-                                type="file"
-                                id="addWatermark"
-                                accept="image/*"
-                                onChange={handleAddWatermark}
-                                className="hidden" // Ocultar el input nativo
-                                ref={watermarkInputRef} // Ref para el input de marca de agua
-                                key={nextWatermarkId} // Para limpiar el input después de seleccionar un archivo
-                            />
-                            <button
-                                onClick={() => watermarkInputRef.current.click()}
-                                className="w-full py-2 px-4 rounded-full border-0 text-sm font-semibold
-                                           bg-purple-100 text-purple-700 hover:bg-purple-200
-                                           transition duration-300 ease-in-out transform hover:scale-105"
-                            >
-                                Seleccionar Marca de Agua
-                            </button>
-                            <p className="text-xs text-gray-500 mt-1">
-                                Sube una imagen para añadirla como marca de agua.
-                            </p>
-                        </div>
-
-                        <h2 className="text-xl font-semibold text-gray-700 mt-4 mb-2">2. Ajusta las Marcas de Agua</h2>
-
-                        {/* Controles de escala */}
-                        <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                            {activeWatermark ? (
-                                <>
-                                    <div className="mb-4">
-                                        <label htmlFor="watermarkScale" className="block text-gray-700 text-sm font-medium mb-2">
-                                            Escala de la Marca de Agua Activa (ID: {activeWatermark.id}): {(activeWatermark.scale * 100).toFixed(0)}%
-                                        </label>
-                                        <input
-                                            type="range"
-                                            id="watermarkScale"
-                                            min="0.05"
-                                            max="1.0"
-                                            step="0.01"
-                                            value={activeWatermark.scale}
-                                            onChange={handleWatermarkScaleChange}
-                                            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                                        />
-                                    </div>
-                                    <button
-                                        onClick={handleRemoveWatermark}
-                                        className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-full shadow-md
-                                                   transition duration-300 ease-in-out transform hover:scale-105"
-                                    >
-                                        Eliminar Marca de Agua Activa
-                                    </button>
-                                    <p className="text-sm text-gray-600 mt-2">
-                                        Haz clic en una marca de agua en la imagen para seleccionarla y arrastrarla.
-                                    </p>
-                                </>
-                            ) : (
-                                <p className="text-sm text-gray-600">
-                                    Selecciona una marca de agua en la imagen para ajustar su escala o eliminarla.
-                                </p>
-                            )}
-                        </div>
-                        {/* Botón de Reiniciar */}
+                    {/* Carga de imagen base */}
+                    <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-200">
+                        <label className="block text-gray-700 text-sm font-medium mb-2">
+                            Imagen Base:
+                        </label>
+                        <input
+                            type="file"
+                            id="baseImage"
+                            accept="image/*"
+                            onChange={handleBaseImageUpload}
+                            className="hidden" // Ocultar el input nativo
+                            ref={baseImageInputRef}
+                        />
                         <button
-                            onClick={handleReset}
-                            className="mt-4 w-full bg-gray-400 hover:bg-gray-500 text-white font-bold py-3 px-6 rounded-full shadow-md
+                            onClick={() => baseImageInputRef.current.click()}
+                            className="w-full py-2 px-4 rounded-full border-0 text-sm font-semibold
+                                       bg-indigo-100 text-indigo-700 hover:bg-indigo-200
                                        transition duration-300 ease-in-out transform hover:scale-105"
                         >
-                            Reiniciar
+                            Seleccionar Imagen Base
                         </button>
+                        <p className="mt-2 text-sm text-gray-600">
+                            {baseImageName ? `Archivo seleccionado: ${baseImageName}` : 'Ningún archivo seleccionado'}
+                        </p>
+                    </div>
 
-                        {/* Botón de Descargar */}
+                    {/* Carga de imagen de marca de agua */}
+                    <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                        <label className="block text-gray-700 text-sm font-medium mb-2">
+                            Añadir Marca de Agua:
+                        </label>
+                        <input
+                            type="file"
+                            id="addWatermark"
+                            accept="image/*"
+                            onChange={handleAddWatermark}
+                            className="hidden" // Ocultar el input nativo
+                            ref={watermarkInputRef} // Ref para el input de marca de agua
+                            key={nextWatermarkId} // Para limpiar el input después de seleccionar un archivo
+                        />
                         <button
-                            onClick={downloadImage}
-                            className="mt-4 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-full shadow-md
-                                       transition duration-300 ease-in-out transform hover:scale-105 flex items-center justify-center gap-2"
+                            onClick={() => watermarkInputRef.current.click()}
+                            className="w-full py-2 px-4 rounded-full border-0 text-sm font-semibold
+                                       bg-purple-100 text-purple-700 hover:bg-purple-200
+                                       transition duration-300 ease-in-out transform hover:scale-105"
                         >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 9.414V13a1 1 0 11-2 0V9.414L6.707 10.293a1 1 0 01-1.414-1.414z" clipRule="evenodd" />
-                            </svg>
-                            Descargar Imagen
+                            Seleccionar Marca de Agua
                         </button>
+                        <p className="text-xs text-gray-500 mt-1">
+                            Sube una imagen para añadirla como marca de agua.
+                        </p>
+                    </div>
 
-                        {/* Mensajes de carga y error */}
-                        {loading && (
-                            <p className="text-center text-indigo-500 mt-4">Cargando...</p>
-                        )}
-                        {error && (
-                            <p className="text-center text-red-500 mt-4">{error}</p>
+                    <h2 className="text-xl font-semibold text-gray-700 mt-4 mb-2">2. Ajusta las Marcas de Agua</h2>
+
+                    {/* Controles de escala */}
+                    <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                        {activeWatermark ? (
+                            <>
+                                <div className="mb-4">
+                                    <label htmlFor="watermarkScale" className="block text-gray-700 text-sm font-medium mb-2">
+                                        Escala de la Marca de Agua Activa (ID: {activeWatermark.id}): {(activeWatermark.scale * 100).toFixed(0)}%
+                                    </label>
+                                    <input
+                                        type="range"
+                                        id="watermarkScale"
+                                        min="0.05"
+                                        max="1.0"
+                                        step="0.01"
+                                        value={activeWatermark.scale}
+                                        onChange={handleWatermarkScaleChange}
+                                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                                    />
+                                </div>
+                                <button
+                                    onClick={handleRemoveWatermark}
+                                    className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-full shadow-md
+                                                   transition duration-300 ease-in-out transform hover:scale-105"
+                                >
+                                    Eliminar Marca de Agua Activa
+                                </button>
+                                <p className="text-sm text-gray-600 mt-2">
+                                    Haz clic en una marca de agua en la imagen para seleccionarla y arrastrarla.
+                                </p>
+                            </>
+                        ) : (
+                            <p className="text-sm text-gray-600">
+                                Selecciona una marca de agua en la imagen para ajustar su escala o eliminarla.
+                            </p>
                         )}
                     </div>
 
-                    {/* Sección de Canvas - Ocupa todo el ancho en móvil, mitad en desktop */}
-                    <div className="w-full h-[400px] lg:w-1/2 lg:h-auto flex justify-center items-center bg-gray-100 rounded-lg shadow-inner overflow-hidden border border-gray-300">
+                    {/* Canvas para móvil (oculto en escritorio) */}
+                    {/* Este div se mostrará solo en pantallas pequeñas para colocar el canvas después de los controles de ajuste */}
+                    <div className="w-full h-[400px] flex justify-center items-center bg-gray-100 rounded-lg shadow-inner overflow-hidden border border-gray-300 md:hidden">
                         <canvas
                             ref={canvasRef}
                             className="max-w-full h-auto rounded-lg"
                             onMouseDown={handleInteractionStart}
                             onMouseMove={handleInteractionMove}
                             onMouseUp={handleInteractionEnd}
-                            onMouseLeave={handleInteractionEnd} // Terminar arrastre si el ratón sale del canvas
+                            onMouseLeave={handleInteractionEnd}
                             onTouchStart={handleInteractionStart}
                             onTouchMove={handleInteractionMove}
                             onTouchEnd={handleInteractionEnd}
                             onTouchCancel={handleInteractionEnd}
                         ></canvas>
                     </div>
+
+                    {/* Botones de Reiniciar y Descargar, y mensajes de carga/error (se muestran aquí en móvil) */}
+                    {loading && (
+                        <p className="text-center text-indigo-500 mt-4">Cargando...</p>
+                    )}
+                    {error && (
+                        <p className="text-center text-red-500 mt-4">{error}</p>
+                    )}
+                    <button
+                        onClick={handleReset}
+                        className="mt-4 w-full bg-gray-400 hover:bg-gray-500 text-white font-bold py-3 px-6 rounded-full shadow-md
+                                   transition duration-300 ease-in-out transform hover:scale-105"
+                    >
+                        Reiniciar
+                    </button>
+                    <button
+                        onClick={downloadImage}
+                        className="mt-4 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-full shadow-md
+                                   transition duration-300 ease-in-out transform hover:scale-105 flex items-center justify-center gap-2"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 9.414V13a1 1 0 11-2 0V9.414L6.707 10.293a1 1 0 01-1.414-1.414z" clipRule="evenodd" />
+                        </svg>
+                        Descargar Imagen
+                    </button>
+                </div>
+
+                {/* Canvas para escritorio (oculto en móvil) */}
+                {/* Este div se mostrará solo en pantallas medianas o más grandes para el diseño de dos columnas */}
+                <div className="hidden md:flex w-full md:w-1/2 justify-center items-center bg-gray-100 rounded-lg shadow-inner overflow-hidden min-h-[400px] border border-gray-300">
+                    <canvas
+                        ref={canvasRef}
+                        className="max-w-full h-auto rounded-lg"
+                        onMouseDown={handleInteractionStart}
+                        onMouseMove={handleInteractionMove}
+                        onMouseUp={handleInteractionEnd}
+                        onMouseLeave={handleInteractionEnd}
+                        onTouchStart={handleInteractionStart}
+                        onTouchMove={handleInteractionMove}
+                        onTouchEnd={handleInteractionEnd}
+                        onTouchCancel={handleInteractionEnd}
+                    ></canvas>
                 </div>
             </div>
         </div>
@@ -567,4 +600,5 @@ const App = () => {
 };
 
 export default App;
+
 
