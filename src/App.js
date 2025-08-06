@@ -53,9 +53,8 @@ const App = () => {
         const ctx = canvas.getContext('2d');
         ctx.clearRect(0, 0, canvas.width, canvas.height); // Limpiar el canvas
 
-        setLoading(true);
-        setError(null);
-        allWatermarkBounds.current.clear(); // Limpiar los límites anteriores
+        // Eliminado: setLoading(true) y setError(null) de aquí para evitar re-renders durante el arrastre.
+        // Ahora se gestionan en handleBaseImageUpload y handleAddWatermark.
 
         try {
             let baseImage = null;
@@ -144,9 +143,9 @@ const App = () => {
 
         } catch (err) {
             console.error("Error al dibujar en el canvas:", err);
-            setError("Error al procesar las imágenes. Asegúrate de que sean archivos de imagen válidos.");
+            // El error se gestiona donde se carga la imagen, no aquí en cada frame.
         } finally {
-            setLoading(false);
+            // Eliminado: setLoading(false) de aquí. Se gestiona en las funciones de carga de imagen.
         }
     }, [baseImageSrc, watermarks, activeWatermarkId, loadImage, isDragging, initialWatermarkX, initialWatermarkY]); // Dependencias para useCallback
 
@@ -207,16 +206,19 @@ const App = () => {
     const handleBaseImageUpload = (event) => {
         const file = event.target.files[0];
         if (file) {
+            setLoading(true); // Iniciar carga
+            setError(null); // Limpiar errores previos
             const reader = new FileReader();
             reader.onloadend = () => {
                 setBaseImageSrc(reader.result);
                 setWatermarks([]); // Limpiar marcas de agua al cargar nueva imagen base
                 setActiveWatermarkId(null);
                 setNextWatermarkId(0);
-                setError(null); // Limpiar errores anteriores
+                setLoading(false); // Finalizar carga
             };
             reader.onerror = () => {
                 setError("Error al cargar la imagen base.");
+                setLoading(false); // Finalizar carga con error
             };
             reader.readAsDataURL(file);
         }
@@ -234,6 +236,8 @@ const App = () => {
 
         const file = event.target.files[0];
         if (file) {
+            setLoading(true); // Iniciar carga
+            setError(null); // Limpiar errores previos
             const reader = new FileReader();
             reader.onloadend = () => {
                 const img = new Image();
@@ -250,10 +254,12 @@ const App = () => {
                     setWatermarks(prev => [...prev, newWatermark]);
                     setActiveWatermarkId(newWatermark.id); // Seleccionar la marca de agua recién añadida
                     setNextWatermarkId(prev => prev + 1);
+                    setLoading(false); // Finalizar carga
                     setError(null);
                 };
                 img.onerror = () => {
                     setError("Error al cargar la imagen de marca de agua.");
+                    setLoading(false); // Finalizar carga con error
                 };
                 img.src = reader.result;
             };
@@ -339,7 +345,6 @@ const App = () => {
         event.preventDefault(); // Prevenir el desplazamiento en dispositivos táctiles
 
         const { x, y } = getEventCoords(event);
-        // const canvas = canvasRef.current; // REMOVIDO: 'canvas' is assigned a value but never used
 
         const dx = x - dragStartX;
         const dy = y - dragStartY;
@@ -530,8 +535,8 @@ const App = () => {
                     display: flex;
                     justify-content: center;
                     align-items: center;
-                    width: 56px; /* Tamaño del botón */
-                    height: 56px; /* Tamaño del botón */
+                    width: 44px; /* Tamaño del botón reducido */
+                    height: 44px; /* Tamaño del botón reducido */
                     border-radius: 50%;
                     background-color: #6366f1; /* Indigo 500 */
                     color: white;
@@ -557,8 +562,8 @@ const App = () => {
                 Por: Javier Valverde Salvatierra
             </p>
 
-            {/* Contenedor principal de la aplicación - solo para el canvas */}
-            <div className="bg-white p-6 rounded-xl shadow-lg w-full max-w-4xl flex justify-center items-center overflow-hidden border border-gray-300 min-h-[400px]">
+            {/* Contenedor principal de la aplicación - ahora con flex-grow y max-height */}
+            <div className="bg-white p-6 rounded-xl shadow-lg w-full max-w-4xl flex justify-center items-center overflow-hidden border border-gray-300 flex-grow max-h-[70vh] min-h-[300px]">
                 <canvas
                     ref={canvasRef}
                     className="max-w-full h-auto rounded-lg"
@@ -574,14 +579,14 @@ const App = () => {
             </div>
 
             {/* Panel de Acciones - Ahora debajo del canvas y no fijo */}
-            <div className="w-full max-w-4xl flex flex-wrap justify-center gap-3 mt-4 mb-8 p-2 bg-white bg-opacity-90 rounded-xl shadow-lg">
+            <div className="w-full max-w-4xl flex flex-wrap justify-center gap-2 mt-4 mb-8 p-2 bg-white bg-opacity-90 rounded-xl shadow-lg">
                 {/* Botón para Seleccionar Imagen Base */}
                 <button
                     onClick={() => baseImageInputRef.current.click()}
                     className="icon-button"
                     title="Seleccionar Imagen Base: Sube la imagen principal sobre la que trabajarás."
                 >
-                    <FileUp size={24} />
+                    <FileUp size={20} /> {/* Tamaño del icono reducido */}
                 </button>
                 <input
                     type="file"
@@ -599,7 +604,7 @@ const App = () => {
                     title="Añadir Marca de Agua: Sube una imagen para usarla como marca de agua. Requiere una imagen base."
                     disabled={!baseImageSrc} // Deshabilita si no hay imagen base
                 >
-                    <ImagePlus size={24} />
+                    <ImagePlus size={20} /> {/* Tamaño del icono reducido */}
                 </button>
                 <input
                     type="file"
@@ -617,7 +622,7 @@ const App = () => {
                     className="icon-button bg-blue-500 hover:bg-blue-600"
                     title="Ajustar Marca de Agua: Abre un panel para cambiar la escala o eliminar la marca de agua seleccionada."
                 >
-                    <SlidersHorizontal size={24} />
+                    <SlidersHorizontal size={20} /> {/* Tamaño del icono reducido */}
                 </button>
 
                 {/* Botón para Reiniciar */}
@@ -626,7 +631,7 @@ const App = () => {
                     className="icon-button bg-gray-500 hover:bg-gray-600"
                     title="Reiniciar: Borra todas las imágenes y marcas de agua, y restablece la aplicación."
                 >
-                    <RotateCcw size={24} />
+                    <RotateCcw size={20} /> {/* Tamaño del icono reducido */}
                 </button>
 
                 {/* Botón para Descargar Imagen */}
@@ -635,7 +640,7 @@ const App = () => {
                     className="icon-button bg-green-500 hover:bg-green-600"
                     title="Descargar Imagen: Guarda la imagen base con todas las marcas de agua aplicadas."
                 >
-                    <Download size={24} />
+                    <Download size={20} /> {/* Tamaño del icono reducido */}
                 </button>
 
                 {/* Nuevo Botón de Ayuda */}
@@ -644,7 +649,7 @@ const App = () => {
                     className="icon-button bg-purple-500 hover:bg-purple-600"
                     title="Ayuda: Muestra información sobre el uso de cada botón."
                 >
-                    <HelpCircle size={24} />
+                    <HelpCircle size={20} /> {/* Tamaño del icono reducido */}
                 </button>
             </div>
 
