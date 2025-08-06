@@ -6,7 +6,6 @@ import { FileUp, ImagePlus, RotateCcw, Download, SlidersHorizontal, Trash2 } fro
 const App = () => {
     // Estados para las imágenes y sus propiedades
     const [baseImageSrc, setBaseImageSrc] = useState(null); // URL de la imagen base
-    // REMOVIDO: baseImageName ya no es necesario si no se usa ni se muestra.
     const [watermarks, setWatermarks] = useState([]); // [{ id, src, obj, x, y, scale, name }]
     const [nextWatermarkId, setNextWatermarkId] = useState(0); // Para generar IDs únicos para las marcas de agua
     const [activeWatermarkId, setActiveWatermarkId] = useState(null); // ID de la marca de agua actualmente seleccionada
@@ -71,10 +70,6 @@ const App = () => {
 
                 canvas.width = scaledWidth;
                 canvas.height = scaledHeight;
-
-                // REMOVIDO: offsetX y offsetY ya no se usan directamente en drawImage.
-                // const offsetX = (containerWidth - scaledWidth) / 2;
-                // const offsetY = (containerHeight - scaledHeight) / 2;
 
                 ctx.drawImage(baseImage, 0, 0, scaledWidth, scaledHeight); // Dibujar la imagen base
             } else {
@@ -171,7 +166,6 @@ const App = () => {
             const reader = new FileReader();
             reader.onloadend = () => {
                 setBaseImageSrc(reader.result);
-                // REMOVIDO: setBaseImageName(file.name); ya no se usa ni se muestra.
                 setWatermarks([]); // Limpiar marcas de agua al cargar nueva imagen base
                 setActiveWatermarkId(null);
                 setNextWatermarkId(0);
@@ -248,13 +242,16 @@ const App = () => {
     };
 
     const handleInteractionStart = (event) => {
-        const { x, y } = getEventCoords(event);
         const canvas = canvasRef.current;
-        if (!canvas || !baseImageSrc) return; // Solo permitir interacción si la imagen base está cargada
+        if (!canvas || !baseImageSrc) return;
 
+        // Prevenir el comportamiento predeterminado en touchstart para evitar pull-to-refresh
+        if (event.touches && event.touches.length > 0) {
+            event.preventDefault();
+        }
+
+        const { x, y } = getEventCoords(event);
         let clickedWatermarkId = null;
-        // Iterar las marcas de agua en orden inverso para seleccionar la superior si se superponen
-        // Usamos Array.from(Map.entries()) para poder iterar en orden inverso
         const watermarksArray = Array.from(allWatermarkBounds.current.entries());
         for (let i = watermarksArray.length - 1; i >= 0; i--) {
             const [id, bounds] = watermarksArray[i];
@@ -270,18 +267,16 @@ const App = () => {
         if (clickedWatermarkId !== null) {
             setActiveWatermarkId(clickedWatermarkId);
             setIsDragging(true);
-            setDragStartX(x); // Guardar coordenadas escaladas
-            setDragStartY(y); // Guardar coordenadas escaladas
+            setDragStartX(x);
+            setDragStartY(y);
             const activeWatermark = watermarks.find(w => w.id === clickedWatermarkId);
             if (activeWatermark) {
                 setInitialWatermarkX(activeWatermark.x);
                 setInitialWatermarkY(activeWatermark.y);
             }
-            event.preventDefault(); // Prevenir el desplazamiento en dispositivos táctiles
         } else {
-            // Si no se hizo clic en ninguna marca de agua, deseleccionar cualquier marca de agua activa
             setActiveWatermarkId(null);
-            setShowAdjustmentPanel(false); // Ocultar panel de ajustes si no hay nada seleccionado
+            setShowAdjustmentPanel(false);
         }
     };
 
@@ -289,7 +284,7 @@ const App = () => {
         if (!isDragging || activeWatermarkId === null) return;
         event.preventDefault(); // Prevenir el desplazamiento en dispositivos táctiles
 
-        const { x, y } = getEventCoords(event); // Obtener coordenadas escaladas
+        const { x, y } = getEventCoords(event);
         const canvas = canvasRef.current;
 
         const dx = x - dragStartX;
@@ -301,7 +296,6 @@ const App = () => {
                     let newX = initialWatermarkX + dx;
                     let newY = initialWatermarkY + dy;
 
-                    // Limitar la posición de la marca de agua dentro del canvas
                     if (wm.obj) {
                         const scaledWatermarkWidth = wm.obj.width * wm.scale;
                         const scaledWatermarkHeight = wm.obj.height * wm.scale;
@@ -405,7 +399,6 @@ const App = () => {
     // Función para reiniciar la aplicación a su estado inicial
     const handleReset = () => {
         setBaseImageSrc(null);
-        // REMOVIDO: setBaseImageName(null); ya no es necesario
         setWatermarks([]);
         setNextWatermarkId(0);
         setActiveWatermarkId(null);
@@ -424,6 +417,8 @@ const App = () => {
                 {`
                 body {
                     font-family: 'Inter', sans-serif;
+                    /* Previene el pull-to-refresh en navegadores móviles */
+                    overscroll-behavior-y: contain;
                 }
                 input[type="range"]::-webkit-slider-thumb {
                     -webkit-appearance: none;
@@ -481,7 +476,7 @@ const App = () => {
             </style>
 
             {/* Título de la aplicación - Tamaño de fuente disminuido */}
-            <h1 className="text-2xl sm:text-3xl font-bold text-indigo-800 mb-2 text-center">
+            <h1 className="text-xl sm:text-2xl font-bold text-indigo-800 mb-2 text-center">
                 Editor de Imágenes con Marca de Agua
             </h1>
             <p className="text-lg text-indigo-600 mb-6 text-center">
