@@ -25,6 +25,7 @@ const App = () => {
     const currentDragOffsetRef = useRef({ dx: 0, dy: 0 }); // Almacena el desplazamiento actual durante el arrastre
     const animationFrameIdRef = useRef(null); // ID del requestAnimationFrame para cancelar
     const activeWatermarkRef = useRef(null); // Referencia a la marca de agua activa para manipulación directa durante el arrastre
+    const loadedBaseImageRef = useRef(null); // NUEVO: Referencia para almacenar el objeto Image de la imagen base ya cargada
 
     // Referencias al elemento canvas y a los inputs de archivo
     const canvasRef = useRef(null);
@@ -53,14 +54,11 @@ const App = () => {
         const ctx = canvas.getContext('2d');
         ctx.clearRect(0, 0, canvas.width, canvas.height); // Limpiar el canvas
 
-        // Eliminado: setLoading(true) y setError(null) de aquí para evitar re-renders durante el arrastre.
-        // Ahora se gestionan en handleBaseImageUpload y handleAddWatermark.
-
         try {
-            let baseImage = null;
-            if (baseImageSrc) {
-                baseImage = await loadImage(baseImageSrc);
+            // Usar loadedBaseImageRef.current directamente si está disponible
+            const baseImage = loadedBaseImageRef.current;
 
+            if (baseImage && baseImageSrc) { // Asegurarse de que baseImageSrc también exista para el redimensionamiento
                 // *** Lógica de redimensionamiento de la imagen base para ajustarse al canvas ***
                 const canvasContainer = canvas.parentElement;
                 const containerWidth = canvasContainer.clientWidth;
@@ -92,7 +90,7 @@ const App = () => {
 
             // Dibujar todas las marcas de agua
             for (const watermark of watermarks) {
-                if (baseImage && watermark.obj) {
+                if (baseImage && watermark.obj) { // Asegurarse de que haya una imagen base para dibujar las marcas de agua
                     let currentX = watermark.x;
                     let currentY = watermark.y;
 
@@ -210,11 +208,21 @@ const App = () => {
             setError(null); // Limpiar errores previos
             const reader = new FileReader();
             reader.onloadend = () => {
-                setBaseImageSrc(reader.result);
-                setWatermarks([]); // Limpiar marcas de agua al cargar nueva imagen base
-                setActiveWatermarkId(null);
-                setNextWatermarkId(0);
-                setLoading(false); // Finalizar carga
+                const img = new Image(); // Crear un nuevo objeto Image
+                img.onload = () => {
+                    setBaseImageSrc(reader.result);
+                    loadedBaseImageRef.current = img; // Almacenar el objeto Image cargado
+                    setWatermarks([]); // Limpiar marcas de agua al cargar nueva imagen base
+                    setActiveWatermarkId(null);
+                    setNextWatermarkId(0);
+                    setLoading(false); // Finalizar carga
+                    drawImagesOnCanvas(); // Redibujar después de cargar la base
+                };
+                img.onerror = () => {
+                    setError("Error al cargar la imagen base.");
+                    setLoading(false); // Finalizar carga con error
+                };
+                img.src = reader.result;
             };
             reader.onerror = () => {
                 setError("Error al cargar la imagen base.");
@@ -477,6 +485,7 @@ const App = () => {
     // Función para reiniciar la aplicación a su estado inicial
     const handleReset = () => {
         setBaseImageSrc(null);
+        loadedBaseImageRef.current = null; // Limpiar la referencia de la imagen base cargada
         setWatermarks([]);
         setNextWatermarkId(0);
         setActiveWatermarkId(null);
