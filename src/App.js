@@ -25,7 +25,7 @@ const App = () => {
     const currentDragOffsetRef = useRef({ dx: 0, dy: 0 }); // Almacena el desplazamiento actual durante el arrastre
     const animationFrameIdRef = useRef(null); // ID del requestAnimationFrame para cancelar
     const activeWatermarkRef = useRef(null); // Referencia a la marca de agua activa para manipulación directa durante el arrastre
-    const loadedBaseImageRef = useRef(null); // NUEVO: Referencia para almacenar el objeto Image de la imagen base ya cargada
+    const loadedBaseImageRef = useRef(null); // Referencia para almacenar el objeto Image de la imagen base ya cargada
 
     // Referencias al elemento canvas y a los inputs de archivo
     const canvasRef = useRef(null);
@@ -207,9 +207,9 @@ const App = () => {
             setLoading(true); // Iniciar carga
             setError(null); // Limpiar errores previos
             const reader = new FileReader();
-            reader.onloadend = () => {
-                const img = new Image(); // Crear un nuevo objeto Image
-                img.onload = () => {
+            reader.onloadend = async () => { // Hacemos la función asíncrona
+                try {
+                    const img = await loadImage(reader.result); // Usamos la función loadImage
                     setBaseImageSrc(reader.result);
                     loadedBaseImageRef.current = img; // Almacenar el objeto Image cargado
                     setWatermarks([]); // Limpiar marcas de agua al cargar nueva imagen base
@@ -217,12 +217,10 @@ const App = () => {
                     setNextWatermarkId(0);
                     setLoading(false); // Finalizar carga
                     drawImagesOnCanvas(); // Redibujar después de cargar la base
-                };
-                img.onerror = () => {
+                } catch (err) {
                     setError("Error al cargar la imagen base.");
                     setLoading(false); // Finalizar carga con error
-                };
-                img.src = reader.result;
+                }
             };
             reader.onerror = () => {
                 setError("Error al cargar la imagen base.");
@@ -247,9 +245,9 @@ const App = () => {
             setLoading(true); // Iniciar carga
             setError(null); // Limpiar errores previos
             const reader = new FileReader();
-            reader.onloadend = () => {
-                const img = new Image();
-                img.onload = () => {
+            reader.onloadend = async () => { // Hacemos la función asíncrona
+                try {
+                    const img = await loadImage(reader.result); // Usamos la función loadImage
                     const newWatermark = {
                         id: nextWatermarkId,
                         src: reader.result,
@@ -264,12 +262,10 @@ const App = () => {
                     setNextWatermarkId(prev => prev + 1);
                     setLoading(false); // Finalizar carga
                     setError(null);
-                };
-                img.onerror = () => {
+                } catch (err) {
                     setError("Error al cargar la imagen de marca de agua.");
                     setLoading(false); // Finalizar carga con error
-                };
-                img.src = reader.result;
+                }
             };
             reader.readAsDataURL(file);
         }
