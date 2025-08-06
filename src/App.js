@@ -181,9 +181,10 @@ const App = () => {
     // Función para añadir una nueva marca de agua
     const handleAddWatermark = (event) => {
         // Validar si hay una imagen base cargada
+        // Esta validación se complementa con el botón deshabilitado en el JSX
         if (!baseImageSrc) {
             setError("Por favor, sube una imagen base antes de añadir una marca de agua.");
-            event.target.value = ''; // Limpiar el input de archivo
+            event.target.value = ''; // Limpiar el input de archivo para que el mismo archivo pueda ser seleccionado de nuevo si se intenta sin base
             return;
         }
 
@@ -529,8 +530,9 @@ const App = () => {
                 {/* Botón para Añadir Marca de Agua */}
                 <button
                     onClick={() => watermarkInputRef.current.click()}
-                    className="icon-button"
+                    className={`icon-button ${!baseImageSrc ? 'opacity-50 cursor-not-allowed' : ''}`}
                     title="Añadir Marca de Agua"
+                    disabled={!baseImageSrc} // Deshabilita si no hay imagen base
                 >
                     <ImagePlus size={24} />
                 </button>
@@ -620,6 +622,7 @@ const App = () => {
 };
 
 export default App;
+
 
 
 
