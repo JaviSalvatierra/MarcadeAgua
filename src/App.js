@@ -11,7 +11,7 @@ const App = () => {
     const [activeWatermarkId, setActiveWatermarkId] = useState(null); // ID de la marca de agua actualmente seleccionada
     const [loading, setLoading] = useState(false); // Estado de carga
     const [error, setError] = useState(null); // Estado de error
-    const [showAdjustmentPanel, setShowAdjustmentPanel] = useState(false); // Controla la visibilidad del panel de ajustes
+    const [showAdjustmentPanel, setShowAdjustmentPanel] = useState(false); // Controla la visibilidad del panel de ajustes modal
 
     // Estados para la funcionalidad de arrastre
     const [isDragging, setIsDragging] = useState(false);
@@ -276,7 +276,8 @@ const App = () => {
             }
         } else {
             setActiveWatermarkId(null);
-            setShowAdjustmentPanel(false);
+            // No ocultar el panel de ajustes aquí, ya que el usuario lo controla manualmente
+            // setShowAdjustmentPanel(false);
         }
     };
 
@@ -337,7 +338,7 @@ const App = () => {
         if (activeWatermarkId !== null) {
             setWatermarks(prevWatermarks => prevWatermarks.filter(wm => wm.id !== activeWatermarkId));
             setActiveWatermarkId(null); // Deseleccionar después de eliminar
-            setShowAdjustmentPanel(false); // Ocultar panel de ajustes
+            setShowAdjustmentPanel(false); // Ocultar panel de ajustes al eliminar
         }
     };
 
@@ -499,9 +500,8 @@ const App = () => {
                 ></canvas>
             </div>
 
-            {/* Panel de Acciones Flotante */}
-            {/* En móvil (sm:), será una fila horizontal en la parte inferior. En md y superior, será una columna vertical a la derecha. */}
-            <div className="fixed bottom-4 right-4 z-50 flex flex-row sm:flex-col gap-3 p-2 bg-white bg-opacity-90 rounded-xl shadow-lg">
+            {/* Panel de Acciones - Ahora debajo del canvas y no fijo */}
+            <div className="w-full max-w-4xl flex flex-wrap justify-center gap-3 mt-4 mb-8 p-2 bg-white bg-opacity-90 rounded-xl shadow-lg">
                 {/* Botón para Seleccionar Imagen Base */}
                 <button
                     onClick={() => baseImageInputRef.current.click()}
@@ -565,36 +565,39 @@ const App = () => {
                 </button>
             </div>
 
-            {/* Panel de Ajustes de Marca de Agua Flotante (condicional) */}
-            {/* Se muestra solo si showAdjustmentPanel es true Y hay una marca de agua activa */}
+            {/* Modal de Ajustes de Marca de Agua (condicional) */}
             {showAdjustmentPanel && activeWatermark && (
-                <div className="fixed top-4 right-4 z-50 bg-white p-4 rounded-xl shadow-lg flex flex-col gap-2 w-72">
-                    <h3 className="text-lg font-semibold text-gray-700 mb-2">Ajustar Marca de Agua</h3>
-                    <div className="mb-4">
-                        <label htmlFor="watermarkScale" className="block text-gray-700 text-sm font-medium mb-2">
-                            Escala: {(activeWatermark.scale * 100).toFixed(0)}%
-                        </label>
-                        <input
-                            type="range"
-                            id="watermarkScale"
-                            min="0.05"
-                            max="1.0"
-                            step="0.01"
-                            value={activeWatermark.scale}
-                            onChange={handleWatermarkScaleChange}
-                            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                        />
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50"
+                     onClick={() => setShowAdjustmentPanel(false)}> {/* Cierra el modal al hacer clic en el overlay */}
+                    <div className="bg-white p-6 rounded-xl shadow-lg flex flex-col gap-4 w-11/12 max-w-sm"
+                         onClick={e => e.stopPropagation()}> {/* Evita que el clic dentro del modal lo cierre */}
+                        <h3 className="text-xl font-semibold text-gray-700 mb-2">Ajustar Marca de Agua</h3>
+                        <div className="mb-4">
+                            <label htmlFor="watermarkScale" className="block text-gray-700 text-sm font-medium mb-2">
+                                Escala: {(activeWatermark.scale * 100).toFixed(0)}%
+                            </label>
+                            <input
+                                type="range"
+                                id="watermarkScale"
+                                min="0.05"
+                                max="1.0"
+                                step="0.01"
+                                value={activeWatermark.scale}
+                                onChange={handleWatermarkScaleChange}
+                                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                            />
+                        </div>
+                        <button
+                            onClick={handleRemoveWatermark}
+                            className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-full shadow-md
+                                       transition duration-300 ease-in-out transform hover:scale-105 flex items-center justify-center gap-2"
+                        >
+                            <Trash2 size={18} /> Eliminar Marca de Agua
+                        </button>
+                        <p className="text-sm text-gray-600 mt-2 text-center">
+                            Arrastra la marca de agua en la imagen para moverla.
+                        </p>
                     </div>
-                    <button
-                        onClick={handleRemoveWatermark}
-                        className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-full shadow-md
-                                   transition duration-300 ease-in-out transform hover:scale-105 flex items-center justify-center gap-2"
-                    >
-                        <Trash2 size={18} /> Eliminar Marca de Agua
-                    </button>
-                    <p className="text-sm text-gray-600 mt-2">
-                        Arrastra la marca de agua en la imagen para moverla.
-                    </p>
                 </div>
             )}
 
