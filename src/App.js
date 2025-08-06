@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 // Importa los iconos de Lucide React
-import { FileUp, ImagePlus, RotateCcw, Download, SlidersHorizontal, Trash2 } from 'lucide-react';
+// SlidersHorizontal ha sido eliminado de las importaciones ya que no se utilizaba.
+import { FileUp, ImagePlus, RotateCcw, Download, Trash2 } from 'lucide-react';
 
 // Componente principal de la aplicación
 const App = () => {
@@ -17,7 +18,6 @@ const App = () => {
     // Estados para la funcionalidad de arrastre
     const [isDragging, setIsDragging] = useState(false);
     const [dragStartX, setDragStartX] = useState(0);
-    // FIX: Corrected the useState declaration for dragStartY
     const [dragStartY, setDragStartY] = useState(0);
     const [initialWatermarkX, setInitialWatermarkX] = useState(0);
     const [initialWatermarkY, setInitialWatermarkY] = useState(0);
@@ -500,6 +500,13 @@ const App = () => {
                     className="hidden"
                     ref={baseImageInputRef}
                 />
+                {/* Mostrar el nombre del archivo de la imagen base si está cargado */}
+                {baseImageName && (
+                    <p className="text-sm text-gray-600 text-center">
+                        {baseImageName}
+                    </p>
+                )}
+
 
                 {/* Botón para Añadir Marca de Agua */}
                 <button
@@ -582,6 +589,7 @@ const App = () => {
 };
 
 export default App;
+
 
 
 
