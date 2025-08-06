@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-// Importa los iconos de Lucide React
-import { FileUp, ImagePlus, RotateCcw, Download, SlidersHorizontal, Trash2 } from 'lucide-react';
+// Importa los iconos de Lucide React, incluyendo HelpCircle para el botón de ayuda
+import { FileUp, ImagePlus, RotateCcw, Download, SlidersHorizontal, Trash2, HelpCircle } from 'lucide-react';
 
 // Componente principal de la aplicación
 const App = () => {
@@ -12,6 +12,7 @@ const App = () => {
     const [loading, setLoading] = useState(false); // Estado de carga
     const [error, setError] = useState(null); // Estado de error
     const [showAdjustmentPanel, setShowAdjustmentPanel] = useState(false); // Controla la visibilidad del panel de ajustes modal
+    const [showHelpModal, setShowHelpModal] = useState(false); // Nuevo estado para controlar la visibilidad del modal de ayuda
 
     // Estados para la funcionalidad de arrastre
     const [isDragging, setIsDragging] = useState(false);
@@ -414,6 +415,7 @@ const App = () => {
         setLoading(false);
         setError(null);
         setShowAdjustmentPanel(false); // Ocultar panel de ajustes
+        setShowHelpModal(false); // Ocultar panel de ayuda
         // Opcional: Limpiar los inputs de archivo si es necesario, aunque key={nextWatermarkId} ya ayuda
         if (baseImageInputRef.current) baseImageInputRef.current.value = '';
         if (watermarkInputRef.current) watermarkInputRef.current.value = '';
@@ -514,7 +516,7 @@ const App = () => {
                 <button
                     onClick={() => baseImageInputRef.current.click()}
                     className="icon-button"
-                    title="Seleccionar Imagen Base"
+                    title="Seleccionar Imagen Base: Sube la imagen principal sobre la que trabajarás."
                 >
                     <FileUp size={24} />
                 </button>
@@ -531,7 +533,7 @@ const App = () => {
                 <button
                     onClick={() => watermarkInputRef.current.click()}
                     className={`icon-button ${!baseImageSrc ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    title="Añadir Marca de Agua"
+                    title="Añadir Marca de Agua: Sube una imagen para usarla como marca de agua. Requiere una imagen base."
                     disabled={!baseImageSrc} // Deshabilita si no hay imagen base
                 >
                     <ImagePlus size={24} />
@@ -550,7 +552,7 @@ const App = () => {
                 <button
                     onClick={() => setShowAdjustmentPanel(prev => !prev)}
                     className="icon-button bg-blue-500 hover:bg-blue-600"
-                    title="Ajustar Marca de Agua"
+                    title="Ajustar Marca de Agua: Abre un panel para cambiar la escala o eliminar la marca de agua seleccionada."
                 >
                     <SlidersHorizontal size={24} />
                 </button>
@@ -559,7 +561,7 @@ const App = () => {
                 <button
                     onClick={handleReset}
                     className="icon-button bg-gray-500 hover:bg-gray-600"
-                    title="Reiniciar"
+                    title="Reiniciar: Borra todas las imágenes y marcas de agua, y restablece la aplicación."
                 >
                     <RotateCcw size={24} />
                 </button>
@@ -568,9 +570,18 @@ const App = () => {
                 <button
                     onClick={downloadImage}
                     className="icon-button bg-green-500 hover:bg-green-600"
-                    title="Descargar Imagen"
+                    title="Descargar Imagen: Guarda la imagen base con todas las marcas de agua aplicadas."
                 >
                     <Download size={24} />
+                </button>
+
+                {/* Nuevo Botón de Ayuda */}
+                <button
+                    onClick={() => setShowHelpModal(prev => !prev)}
+                    className="icon-button bg-purple-500 hover:bg-purple-600"
+                    title="Ayuda: Muestra información sobre el uso de cada botón."
+                >
+                    <HelpCircle size={24} />
                 </button>
             </div>
 
@@ -610,12 +621,61 @@ const App = () => {
                 </div>
             )}
 
+            {/* Nuevo Modal de Ayuda (condicional) */}
+            {showHelpModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50"
+                     onClick={() => setShowHelpModal(false)}> {/* Cierra el modal al hacer clic en el overlay */}
+                    <div className="bg-white p-6 rounded-xl shadow-lg flex flex-col gap-4 w-11/12 max-w-lg"
+                         onClick={e => e.stopPropagation()}> {/* Evita que el clic dentro del modal lo cierre */}
+                        <h3 className="text-xl font-semibold text-gray-700 mb-4 text-center">Ayuda de la Aplicación</h3>
+                        <ul className="space-y-3 text-gray-700">
+                            <li className="flex items-center gap-3">
+                                <FileUp size={24} className="text-indigo-600 flex-shrink-0" />
+                                <div>
+                                    <strong className="font-semibold">Seleccionar Imagen Base:</strong> Sube la imagen principal sobre la que trabajarás.
+                                </div>
+                            </li>
+                            <li className="flex items-center gap-3">
+                                <ImagePlus size={24} className="text-indigo-600 flex-shrink-0" />
+                                <div>
+                                    <strong className="font-semibold">Añadir Marca de Agua:</strong> Sube una o **varias imágenes** para usarlas como marcas de agua. Este botón se activa después de subir una imagen base. **Puedes añadir múltiples marcas de agua y manipularlas individualmente.**
+                                </div>
+                            </li>
+                            <li className="flex items-center gap-3">
+                                <SlidersHorizontal size={24} className="text-blue-600 flex-shrink-0" />
+                                <div>
+                                    <strong className="font-semibold">Ajustar Marca de Agua:</strong> Abre un panel para cambiar la escala o eliminar la marca de agua seleccionada. Haz clic en una marca de agua en el lienzo para seleccionarla. **Puedes reubicar cualquier marca de agua arrastrándola directamente en la imagen.**
+                                </div>
+                            </li>
+                            <li className="flex items-center gap-3">
+                                <RotateCcw size={24} className="text-gray-600 flex-shrink-0" />
+                                <div>
+                                    <strong className="font-semibold">Reiniciar:</strong> Borra todas las imágenes y marcas de agua, y restablece la aplicación a su estado inicial.
+                                </div>
+                            </li>
+                            <li className="flex items-center gap-3">
+                                <Download size={24} className="text-green-600 flex-shrink-0" />
+                                <div>
+                                    <strong className="font-semibold">Descargar Imagen:</strong> Guarda la imagen base con todas las marcas de agua aplicadas en tu dispositivo.
+                                </div>
+                            </li>
+                            <li className="flex items-center gap-3">
+                                <HelpCircle size={24} className="text-purple-600 flex-shrink-0" />
+                                <div>
+                                    <strong className="font-semibold">Ayuda:</strong> Muestra esta ventana con información sobre el uso de cada botón.
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            )}
+
             {/* Mensajes de carga y error (pueden aparecer en una posición fija o relativa) */}
             {loading && (
                 <p className="fixed bottom-4 left-4 z-50 text-indigo-500 bg-white p-2 rounded-lg shadow-md">Cargando...</p>
             )}
             {error && (
-                <p className="fixed bottom-4 left-4 z-50 text-red-500 bg-white p-2 rounded-lg shadow-md">{error}</p>
+                <p className="fixed bottom-4 left-4 z-50 text-red-500 bg-white p-2 rounded-lg shadow-md bg-red-100">{error}</p>
             )}
         </div>
     );
