@@ -180,6 +180,13 @@ const App = () => {
 
     // Función para añadir una nueva marca de agua
     const handleAddWatermark = (event) => {
+        // Validar si hay una imagen base cargada
+        if (!baseImageSrc) {
+            setError("Por favor, sube una imagen base antes de añadir una marca de agua.");
+            event.target.value = ''; // Limpiar el input de archivo
+            return;
+        }
+
         const file = event.target.files[0];
         if (file) {
             const reader = new FileReader();
