@@ -145,7 +145,7 @@ const App = () => {
         } finally {
             // Eliminado: setLoading(false) de aquí. Se gestiona en las funciones de carga de imagen.
         }
-    }, [baseImageSrc, watermarks, activeWatermarkId, loadImage, isDragging, initialWatermarkX, initialWatermarkY]); // Dependencias para useCallback
+    }, [baseImageSrc, watermarks, activeWatermarkId, isDragging, initialWatermarkX, initialWatermarkY]); // Dependencias para useCallback
 
 
     // Función de animación para el arrastre
