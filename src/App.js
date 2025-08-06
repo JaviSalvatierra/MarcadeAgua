@@ -339,7 +339,7 @@ const App = () => {
         event.preventDefault(); // Prevenir el desplazamiento en dispositivos táctiles
 
         const { x, y } = getEventCoords(event);
-        const canvas = canvasRef.current;
+        // const canvas = canvasRef.current; // REMOVIDO: 'canvas' is assigned a value but never used
 
         const dx = x - dragStartX;
         const dy = y - dragStartY;
