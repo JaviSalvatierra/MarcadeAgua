@@ -6,7 +6,7 @@ import { FileUp, ImagePlus, RotateCcw, Download, SlidersHorizontal, Trash2 } fro
 const App = () => {
     // Estados para las imágenes y sus propiedades
     const [baseImageSrc, setBaseImageSrc] = useState(null); // URL de la imagen base
-    const [baseImageName, setBaseImageName] = useState(null); // Nombre del archivo de la imagen base (ya no se muestra, pero se mantiene si es útil internamente)
+    // REMOVIDO: baseImageName ya no es necesario si no se usa ni se muestra.
     const [watermarks, setWatermarks] = useState([]); // [{ id, src, obj, x, y, scale, name }]
     const [nextWatermarkId, setNextWatermarkId] = useState(0); // Para generar IDs únicos para las marcas de agua
     const [activeWatermarkId, setActiveWatermarkId] = useState(null); // ID de la marca de agua actualmente seleccionada
@@ -17,7 +17,6 @@ const App = () => {
     // Estados para la funcionalidad de arrastre
     const [isDragging, setIsDragging] = useState(false);
     const [dragStartX, setDragStartX] = useState(0);
-    // FIX: Corrected the useState declaration for dragStartY
     const [dragStartY, setDragStartY] = useState(0);
     const [initialWatermarkX, setInitialWatermarkX] = useState(0);
     const [initialWatermarkY, setInitialWatermarkY] = useState(0);
@@ -73,9 +72,9 @@ const App = () => {
                 canvas.width = scaledWidth;
                 canvas.height = scaledHeight;
 
-                // Centrar la imagen en el canvas si es más pequeña que el contenedor
-                const offsetX = (containerWidth - scaledWidth) / 2;
-                const offsetY = (containerHeight - scaledHeight) / 2;
+                // REMOVIDO: offsetX y offsetY ya no se usan directamente en drawImage.
+                // const offsetX = (containerWidth - scaledWidth) / 2;
+                // const offsetY = (containerHeight - scaledHeight) / 2;
 
                 ctx.drawImage(baseImage, 0, 0, scaledWidth, scaledHeight); // Dibujar la imagen base
             } else {
@@ -172,12 +171,11 @@ const App = () => {
             const reader = new FileReader();
             reader.onloadend = () => {
                 setBaseImageSrc(reader.result);
-                setBaseImageName(file.name); // Guardar el nombre del archivo (no se muestra, pero se mantiene si es útil internamente)
+                // REMOVIDO: setBaseImageName(file.name); ya no se usa ni se muestra.
                 setWatermarks([]); // Limpiar marcas de agua al cargar nueva imagen base
                 setActiveWatermarkId(null);
                 setNextWatermarkId(0);
                 setError(null); // Limpiar errores anteriores
-                // REMOVIDO: setShowAdjustmentPanel(false); // No ocultar/mostrar aquí
             };
             reader.onerror = () => {
                 setError("Error al cargar la imagen base.");
@@ -207,7 +205,6 @@ const App = () => {
                     setActiveWatermarkId(newWatermark.id); // Seleccionar la marca de agua recién añadida
                     setNextWatermarkId(prev => prev + 1);
                     setError(null);
-                    // REMOVIDO: setShowAdjustmentPanel(true); // No mostrar aquí, solo con el botón de ajustes
                 };
                 img.onerror = () => {
                     setError("Error al cargar la imagen de marca de agua.");
@@ -281,7 +278,6 @@ const App = () => {
                 setInitialWatermarkY(activeWatermark.y);
             }
             event.preventDefault(); // Prevenir el desplazamiento en dispositivos táctiles
-            // REMOVIDO: setShowAdjustmentPanel(true); // No mostrar aquí, solo con el botón de ajustes
         } else {
             // Si no se hizo clic en ninguna marca de agua, deseleccionar cualquier marca de agua activa
             setActiveWatermarkId(null);
@@ -409,7 +405,7 @@ const App = () => {
     // Función para reiniciar la aplicación a su estado inicial
     const handleReset = () => {
         setBaseImageSrc(null);
-        setBaseImageName(null);
+        // REMOVIDO: setBaseImageName(null); ya no es necesario
         setWatermarks([]);
         setNextWatermarkId(0);
         setActiveWatermarkId(null);
