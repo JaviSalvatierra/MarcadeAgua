@@ -21,6 +21,11 @@ const App = () => {
     const [initialWatermarkX, setInitialWatermarkX] = useState(0);
     const [initialWatermarkY, setInitialWatermarkY] = useState(0);
 
+    // Referencias para el arrastre y la animación
+    const currentDragOffsetRef = useRef({ dx: 0, dy: 0 }); // Almacena el desplazamiento actual durante el arrastre
+    const animationFrameIdRef = useRef(null); // ID del requestAnimationFrame para cancelar
+    const activeWatermarkRef = useRef(null); // Referencia a la marca de agua activa para manipulación directa durante el arrastre
+
     // Referencias al elemento canvas y a los inputs de archivo
     const canvasRef = useRef(null);
     const baseImageInputRef = useRef(null); // Referencia para el input de la imagen base
@@ -40,7 +45,8 @@ const App = () => {
     }, []);
 
     // Función para dibujar las imágenes en el canvas
-    const drawImagesOnCanvas = useCallback(async (drawSelectionBorder = true) => {
+    // Ahora acepta un dragOffset opcional para dibujar la marca de agua activa en su posición temporal
+    const drawImagesOnCanvas = useCallback(async (drawSelectionBorder = true, dragOffset = { dx: 0, dy: 0 }) => {
         const canvas = canvasRef.current;
         if (!canvas) return;
 
@@ -88,12 +94,21 @@ const App = () => {
             // Dibujar todas las marcas de agua
             for (const watermark of watermarks) {
                 if (baseImage && watermark.obj) {
+                    let currentX = watermark.x;
+                    let currentY = watermark.y;
+
+                    // Si esta es la marca de agua activa y estamos arrastrando, aplicar el offset temporal
+                    if (isDragging && activeWatermarkId === watermark.id && activeWatermarkRef.current) {
+                        currentX = initialWatermarkX + dragOffset.dx;
+                        currentY = initialWatermarkY + dragOffset.dy;
+                    }
+
                     const scaledWatermarkWidth = watermark.obj.width * watermark.scale;
                     const scaledWatermarkHeight = watermark.obj.height * watermark.scale;
 
                     // Asegurarse de que la marca de agua no se salga de los límites
-                    const actualX = Math.max(0, Math.min(watermark.x, canvas.width - scaledWatermarkWidth));
-                    const actualY = Math.max(0, Math.min(watermark.y, canvas.height - scaledWatermarkHeight));
+                    const actualX = Math.max(0, Math.min(currentX, canvas.width - scaledWatermarkWidth));
+                    const actualY = Math.max(0, Math.min(currentY, canvas.height - scaledWatermarkHeight));
 
                     ctx.drawImage(watermark.obj, actualX, actualY, scaledWatermarkWidth, scaledWatermarkHeight);
 
@@ -133,12 +148,40 @@ const App = () => {
         } finally {
             setLoading(false);
         }
-    }, [baseImageSrc, watermarks, activeWatermarkId, loadImage]); // Dependencias para useCallback
+    }, [baseImageSrc, watermarks, activeWatermarkId, loadImage, isDragging, initialWatermarkX, initialWatermarkY]); // Dependencias para useCallback
 
-    // Efecto para dibujar las imágenes en el canvas cada vez que cambian los estados relevantes
+
+    // Función de animación para el arrastre
+    const animateDrag = useCallback(() => {
+        drawImagesOnCanvas(true, currentDragOffsetRef.current);
+        animationFrameIdRef.current = requestAnimationFrame(animateDrag);
+    }, [drawImagesOnCanvas]);
+
+
+    // Efecto para iniciar/detener el bucle de animación de arrastre
     useEffect(() => {
-        drawImagesOnCanvas();
-    }, [drawImagesOnCanvas]); // Dependencia del useCallback
+        if (isDragging) {
+            // Iniciar el bucle de animación si no está ya activo
+            if (!animationFrameIdRef.current) {
+                animationFrameIdRef.current = requestAnimationFrame(animateDrag);
+            }
+        } else {
+            // Detener el bucle de animación si no estamos arrastrando
+            if (animationFrameIdRef.current) {
+                cancelAnimationFrame(animationFrameIdRef.current);
+                animationFrameIdRef.current = null;
+            }
+            // Asegurarse de que el canvas se redibuje con el estado final
+            drawImagesOnCanvas();
+        }
+        // Limpieza: cancelar el frame cuando el componente se desmonte o isDragging cambie a false
+        return () => {
+            if (animationFrameIdRef.current) {
+                cancelAnimationFrame(animationFrameIdRef.current);
+                animationFrameIdRef.current = null;
+            }
+        };
+    }, [isDragging, animateDrag, drawImagesOnCanvas]); // Dependencias para useEffect
 
     // Efecto para manejar el redimensionamiento del canvas
     useEffect(() => {
@@ -282,16 +325,17 @@ const App = () => {
             if (activeWatermark) {
                 setInitialWatermarkX(activeWatermark.x);
                 setInitialWatermarkY(activeWatermark.y);
+                activeWatermarkRef.current = activeWatermark; // Guardar referencia a la marca de agua activa
             }
+            currentDragOffsetRef.current = { dx: 0, dy: 0 }; // Resetear offset al inicio del arrastre
         } else {
             setActiveWatermarkId(null);
-            // No ocultar el panel de ajustes aquí, ya que el usuario lo controla manualmente
-            // setShowAdjustmentPanel(false);
+            activeWatermarkRef.current = null; // Limpiar referencia
         }
     };
 
     const handleInteractionMove = (event) => {
-        if (!isDragging || activeWatermarkId === null) return;
+        if (!isDragging || activeWatermarkId === null || !activeWatermarkRef.current) return;
         event.preventDefault(); // Prevenir el desplazamiento en dispositivos táctiles
 
         const { x, y } = getEventCoords(event);
@@ -300,28 +344,47 @@ const App = () => {
         const dx = x - dragStartX;
         const dy = y - dragStartY;
 
-        setWatermarks(prevWatermarks => {
-            return prevWatermarks.map(wm => {
-                if (wm.id === activeWatermarkId) {
-                    let newX = initialWatermarkX + dx;
-                    let newY = initialWatermarkY + dy;
+        // Actualizar el offset en la referencia, no en el estado, para evitar re-renders excesivos
+        currentDragOffsetRef.current = { dx, dy };
 
-                    if (wm.obj) {
-                        const scaledWatermarkWidth = wm.obj.width * wm.scale;
-                        const scaledWatermarkHeight = wm.obj.height * wm.scale;
-
-                        newX = Math.max(0, Math.min(newX, canvas.width - scaledWatermarkWidth));
-                        newY = Math.max(0, Math.min(newY, canvas.height - scaledWatermarkHeight));
-                    }
-                    return { ...wm, x: newX, y: newY };
-                }
-                return wm;
-            });
-        });
+        // Llamar a requestAnimationFrame para el siguiente fotograma si no hay uno pendiente
+        if (!animationFrameIdRef.current) {
+            animationFrameIdRef.current = requestAnimationFrame(animateDrag);
+        }
     };
 
     const handleInteractionEnd = () => {
+        if (isDragging && activeWatermarkId !== null && activeWatermarkRef.current) {
+            // Calcular la posición final y actualizar el estado de las marcas de agua
+            const finalX = initialWatermarkX + currentDragOffsetRef.current.dx;
+            const finalY = initialWatermarkY + currentDragOffsetRef.current.dy;
+
+            setWatermarks(prevWatermarks => {
+                return prevWatermarks.map(wm => {
+                    if (wm.id === activeWatermarkId) {
+                        const scaledWatermarkWidth = wm.obj.width * wm.scale;
+                        const scaledWatermarkHeight = wm.obj.height * wm.scale;
+
+                        // Asegurarse de que la posición final esté dentro de los límites del canvas
+                        const boundedX = Math.max(0, Math.min(finalX, canvasRef.current.width - scaledWatermarkWidth));
+                        const boundedY = Math.max(0, Math.min(finalY, canvasRef.current.height - scaledWatermarkHeight));
+
+                        return { ...wm, x: boundedX, y: boundedY };
+                    }
+                    return wm;
+                });
+            });
+        }
+
         setIsDragging(false);
+        currentDragOffsetRef.current = { dx: 0, dy: 0 }; // Resetear offset
+        activeWatermarkRef.current = null; // Limpiar referencia
+        if (animationFrameIdRef.current) {
+            cancelAnimationFrame(animationFrameIdRef.current);
+            animationFrameIdRef.current = null;
+        }
+        // Asegurarse de que el canvas se redibuje con el estado final
+        drawImagesOnCanvas();
     };
 
     // --- Fin de funciones para arrastrar la marca de agua ---
