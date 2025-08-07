@@ -17,7 +17,7 @@ const App = () => {
     // Estados para la funcionalidad de arrastre
     const [isDragging, setIsDragging] = useState(false);
     const [dragStartX, setDragStartX] = useState(0);
-    const [dragStartY, setDragStartY] = useState(0);
+    const [dragStartY] = useState(0); // dragStartY no se usa, pero se mantiene para claridad
     const [initialWatermarkX, setInitialWatermarkX] = useState(0);
     const [initialWatermarkY, setInitialWatermarkY] = useState(0);
 
@@ -494,6 +494,42 @@ const App = () => {
         if (watermarkInputRef.current) watermarkInputRef.current.value = '';
     };
 
+
+    // --- NUEVO HOOK para manejar el botón de retroceso en el navegador ---
+    useEffect(() => {
+        const isModalOpen = showAdjustmentPanel || showHelpModal;
+
+        const handlePopstate = (e) => {
+            if (isModalOpen) {
+                // Previene el comportamiento predeterminado del navegador (navegar hacia atrás)
+                // y simplemente cierra el modal.
+                e.preventDefault();
+                setShowAdjustmentPanel(false);
+                setShowHelpModal(false);
+            }
+        };
+
+        if (isModalOpen) {
+            // Agrega un nuevo estado al historial del navegador.
+            // Esto permite al botón de retroceso cerrar el modal sin salir de la página.
+            window.history.pushState(null, '', '#modal-open');
+            window.addEventListener('popstate', handlePopstate);
+        }
+
+        // Función de limpieza para eliminar el listener y corregir el historial cuando el modal se cierra.
+        return () => {
+            if (isModalOpen) {
+                window.removeEventListener('popstate', handlePopstate);
+                // Si el modal se cerró con un clic, necesitamos retroceder el historial
+                // para que el botón de retroceso funcione como se espera después.
+                if (window.location.hash === '#modal-open') {
+                    window.history.back();
+                }
+            }
+        };
+    }, [showAdjustmentPanel, showHelpModal]); // Este efecto se ejecuta cada vez que un modal se abre o se cierra.
+
+
     return (
         <div className="min-h-screen bg-gradient-to-br from-blue-100 to-purple-200 p-4 sm:p-6 flex flex-col items-center font-sans relative">
             {/* Tailwind CSS y Google Fonts ya están en public/index.html */}
@@ -697,9 +733,9 @@ const App = () => {
             {/* Nuevo Modal de Ayuda (condicional) */}
             {showHelpModal && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50"
-                     onClick={() => setShowHelpModal(false)}> {/* Cierra el modal al hacer clic en el overlay */}
+                     onClick={() => setShowHelpModal(false)}> {/* Este es el overlay oscuro. Al hacer clic aquí, se oculta el modal */}
                     <div className="bg-white p-6 rounded-xl shadow-lg flex flex-col gap-4 w-11/12 max-w-lg"
-                         onClick={e => e.stopPropagation()}> {/* Evita que el clic dentro del modal lo cierre */}
+                         onClick={e => e.stopPropagation()}> {/* Evita que el clic en el contenido del modal lo cierre */}
                         <h3 className="text-xl font-semibold text-gray-700 mb-4 text-center">Ayuda de la Aplicación</h3>
                         <ul className="space-y-3 text-gray-700">
                             <li className="flex items-center gap-3">
