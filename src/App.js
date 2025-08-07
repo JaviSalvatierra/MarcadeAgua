@@ -17,7 +17,8 @@ const App = () => {
     // Estados para la funcionalidad de arrastre
     const [isDragging, setIsDragging] = useState(false);
     const [dragStartX, setDragStartX] = useState(0);
-    const [dragStartY] = useState(0); // dragStartY no se usa, pero se mantiene para claridad
+    // CORRECCIÓN: Se agrega setDragStartY para que no haya error de "no-undef"
+    const [dragStartY, setDragStartY] = useState(0);
     const [initialWatermarkX, setInitialWatermarkX] = useState(0);
     const [initialWatermarkY, setInitialWatermarkY] = useState(0);
 
