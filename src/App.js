@@ -401,6 +401,7 @@ const App = () => {
         }
     };
 
+    // Nueva función para manejar el cambio de opacidad de la marca de agua
     const handleWatermarkOpacityChange = (e) => {
         const newOpacity = Number(e.target.value);
         if (activeWatermarkId !== null) {
@@ -692,7 +693,23 @@ const App = () => {
                                 className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
                             />
                         </div>
-                        {/* Nuevo control de opacidad para el panel modal */}
+                        {/* Nuevo control de opacidad para la marca de agua */}
+                        <div className="mb-4">
+                            <label htmlFor="watermarkOpacity" className="block text-gray-700 text-sm font-medium mb-2">
+                                Opacidad de la Marca de Agua: {(activeWatermark.opacity * 100).toFixed(0)}%
+                            </label>
+                            <input
+                                type="range"
+                                id="watermarkOpacity"
+                                min="0.0"
+                                max="1.0"
+                                step="0.01"
+                                value={activeWatermark.opacity}
+                                onChange={handleWatermarkOpacityChange}
+                                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                            />
+                        </div>
+                        {/* Control de opacidad para el panel modal */}
                         <div className="mb-4">
                             <label htmlFor="modalOpacity" className="block text-gray-700 text-sm font-medium mb-2">
                                 Opacidad del Panel: {(modalOpacity * 100).toFixed(0)}%
