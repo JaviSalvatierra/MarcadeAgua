@@ -6,18 +6,18 @@ import { FileUp, ImagePlus, RotateCcw, Download, SlidersHorizontal, Trash2, Help
 const App = () => {
     // Estados para las imágenes y sus propiedades
     const [baseImageSrc, setBaseImageSrc] = useState(null); // URL de la imagen base
-    const [watermarks, setWatermarks] = useState([]); // [{ id, src, obj, x, y, scale, name }]
+    const [watermarks, setWatermarks] = useState([]); // [{ id, src, obj, x, y, scale, opacity, name }]
     const [nextWatermarkId, setNextWatermarkId] = useState(0); // Para generar IDs únicos para las marcas de agua
     const [activeWatermarkId, setActiveWatermarkId] = useState(null); // ID de la marca de agua actualmente seleccionada
     const [loading, setLoading] = useState(false); // Estado de carga
     const [error, setError] = useState(null); // Estado de error
     const [showAdjustmentPanel, setShowAdjustmentPanel] = useState(false); // Controla la visibilidad del panel de ajustes modal
     const [showHelpModal, setShowHelpModal] = useState(false); // Nuevo estado para controlar la visibilidad del modal de ayuda
+    const [modalOpacity, setModalOpacity] = useState(1.0); // Nuevo estado para la opacidad del modal
 
     // Estados para la funcionalidad de arrastre
     const [isDragging, setIsDragging] = useState(false);
     const [dragStartX, setDragStartX] = useState(0);
-    // CORRECCIÓN: Se agrega setDragStartY para que no haya error de "no-undef"
     const [dragStartY, setDragStartY] = useState(0);
     const [initialWatermarkX, setInitialWatermarkX] = useState(0);
     const [initialWatermarkY, setInitialWatermarkY] = useState(0);
@@ -32,6 +32,9 @@ const App = () => {
     const canvasRef = useRef(null);
     const baseImageInputRef = useRef(null); // Referencia para el input de la imagen base
     const watermarkInputRef = useRef(null); // Referencia para el input de la marca de agua
+
+    // Referencia para el contenedor del canvas, que observaremos con ResizeObserver
+    const canvasContainerRef = useRef(null);
 
     // Usamos un Map para almacenar los límites de cada marca de agua por su ID
     const allWatermarkBounds = useRef(new Map());
@@ -56,31 +59,25 @@ const App = () => {
         ctx.clearRect(0, 0, canvas.width, canvas.height); // Limpiar el canvas
 
         try {
-            // Usar loadedBaseImageRef.current directamente si está disponible
             const baseImage = loadedBaseImageRef.current;
 
-            if (baseImage && baseImageSrc) { // Asegurarse de que baseImageSrc también exista para el redimensionamiento
-                // *** Lógica de redimensionamiento de la imagen base para ajustarse al canvas ***
-                const canvasContainer = canvas.parentElement;
-                const containerWidth = canvasContainer.clientWidth;
-                const containerHeight = canvasContainer.clientHeight;
-
+            if (baseImage && baseImageSrc) {
+                // Lógica para redimensionar la imagen base para ajustarse al canvas
+                const { width, height } = canvas;
                 let scale = 1;
-                if (baseImage.width > containerWidth || baseImage.height > containerHeight) {
-                    scale = Math.min(containerWidth / baseImage.width, containerHeight / baseImage.height);
+
+                if (baseImage.width > width || baseImage.height > height) {
+                    scale = Math.min(width / baseImage.width, height / baseImage.height);
                 }
 
                 const scaledWidth = baseImage.width * scale;
                 const scaledHeight = baseImage.height * scale;
+                const offsetX = (width - scaledWidth) / 2;
+                const offsetY = (height - scaledHeight) / 2;
 
-                canvas.width = scaledWidth;
-                canvas.height = scaledHeight;
-
-                ctx.drawImage(baseImage, 0, 0, scaledWidth, scaledHeight); // Dibujar la imagen base
+                ctx.drawImage(baseImage, offsetX, offsetY, scaledWidth, scaledHeight);
             } else {
-                // Tamaño predeterminado del canvas si no hay imagen base
-                canvas.width = 600;
-                canvas.height = 400;
+                // Tamaño predeterminado si no hay imagen base
                 ctx.fillStyle = '#f0f0f0';
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
                 ctx.fillStyle = '#888';
@@ -91,11 +88,10 @@ const App = () => {
 
             // Dibujar todas las marcas de agua
             for (const watermark of watermarks) {
-                if (baseImage && watermark.obj) { // Asegurarse de que haya una imagen base para dibujar las marcas de agua
+                if (baseImage && watermark.obj) {
                     let currentX = watermark.x;
                     let currentY = watermark.y;
 
-                    // Si esta es la marca de agua activa y estamos arrastrando, aplicar el offset temporal
                     if (isDragging && activeWatermarkId === watermark.id && activeWatermarkRef.current) {
                         currentX = initialWatermarkX + dragOffset.dx;
                         currentY = initialWatermarkY + dragOffset.dy;
@@ -104,13 +100,17 @@ const App = () => {
                     const scaledWatermarkWidth = watermark.obj.width * watermark.scale;
                     const scaledWatermarkHeight = watermark.obj.height * watermark.scale;
 
-                    // Asegurarse de que la marca de agua no se salga de los límites
                     const actualX = Math.max(0, Math.min(currentX, canvas.width - scaledWatermarkWidth));
                     const actualY = Math.max(0, Math.min(currentY, canvas.height - scaledWatermarkHeight));
 
+                    // Aplica la opacidad a la marca de agua antes de dibujarla
+                    ctx.globalAlpha = watermark.opacity;
+
                     ctx.drawImage(watermark.obj, actualX, actualY, scaledWatermarkWidth, scaledWatermarkHeight);
 
-                    // Guardar los límites de esta marca de agua para la detección de arrastre
+                    // Restablece la opacidad del contexto a 1.0 para que otros elementos no se vean afectados
+                    ctx.globalAlpha = 1.0;
+
                     allWatermarkBounds.current.set(watermark.id, {
                         x: actualX,
                         y: actualY,
@@ -118,9 +118,8 @@ const App = () => {
                         height: scaledWatermarkHeight,
                     });
 
-                    // Dibujar un borde si esta es la marca de agua activa Y si se debe dibujar el borde de selección
                     if (drawSelectionBorder && activeWatermarkId === watermark.id) {
-                        ctx.strokeStyle = '#6366f1'; // Tailwind indigo-500
+                        ctx.strokeStyle = '#6366f1';
                         ctx.lineWidth = 3;
                         ctx.strokeRect(actualX, actualY, scaledWatermarkWidth, scaledWatermarkHeight);
                     }
@@ -142,130 +141,130 @@ const App = () => {
 
         } catch (err) {
             console.error("Error al dibujar en el canvas:", err);
-            // El error se gestiona donde se carga la imagen, no aquí en cada frame.
-        } finally {
-            // Eliminado: setLoading(false) de aquí. Se gestiona en las funciones de carga de imagen.
         }
-    }, [baseImageSrc, watermarks, activeWatermarkId, isDragging, initialWatermarkX, initialWatermarkY]); // Dependencias para useCallback
+    }, [baseImageSrc, watermarks, activeWatermarkId, isDragging, initialWatermarkX, initialWatermarkY]);
 
-
-    // Función de animación para el arrastre
     const animateDrag = useCallback(() => {
         drawImagesOnCanvas(true, currentDragOffsetRef.current);
         animationFrameIdRef.current = requestAnimationFrame(animateDrag);
     }, [drawImagesOnCanvas]);
 
-
-    // Efecto para iniciar/detener el bucle de animación de arrastre
     useEffect(() => {
         if (isDragging) {
-            // Iniciar el bucle de animación si no está ya activo
             if (!animationFrameIdRef.current) {
                 animationFrameIdRef.current = requestAnimationFrame(animateDrag);
             }
         } else {
-            // Detener el bucle de animación si no estamos arrastrando
             if (animationFrameIdRef.current) {
                 cancelAnimationFrame(animationFrameIdRef.current);
                 animationFrameIdRef.current = null;
             }
-            // Asegurarse de que el canvas se redibuje con el estado final
             drawImagesOnCanvas();
         }
-        // Limpieza: cancelar el frame cuando el componente se desmonte o isDragging cambie a false
         return () => {
             if (animationFrameIdRef.current) {
                 cancelAnimationFrame(animationFrameIdRef.current);
                 animationFrameIdRef.current = null;
             }
         };
-    }, [isDragging, animateDrag, drawImagesOnCanvas]); // Dependencias para useEffect
+    }, [isDragging, animateDrag, drawImagesOnCanvas]);
 
-    // Efecto para manejar el redimensionamiento del canvas
+
     useEffect(() => {
         const canvas = canvasRef.current;
-        if (!canvas) return;
+        const container = canvasContainerRef.current;
+        if (!canvas || !container) return;
+
+        let animationFrameId = null;
 
         const resizeCanvas = () => {
-            // Redibujar el contenido cuando el tamaño del canvas cambie
-            drawImagesOnCanvas();
+            // Cancela cualquier frame pendiente para evitar múltiples llamadas en rápida sucesión
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+            }
+
+            // Programa el redimensionamiento para el próximo frame de animación
+            animationFrameId = requestAnimationFrame(() => {
+                canvas.width = container.clientWidth;
+                canvas.height = container.clientHeight;
+                drawImagesOnCanvas();
+            });
         };
 
-        // Usar ResizeObserver para un redimensionamiento más eficiente del canvas
         const resizeObserver = new ResizeObserver(resizeCanvas);
-        resizeObserver.observe(canvas);
+        resizeObserver.observe(container);
 
+        // Limpieza: Desobservar el contenedor y cancelar el frame de animación pendiente
         return () => {
-            resizeObserver.unobserve(canvas);
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+            }
+            resizeObserver.unobserve(container);
         };
     }, [drawImagesOnCanvas]);
 
 
-    // Función para manejar la carga de la imagen base
     const handleBaseImageUpload = (event) => {
         const file = event.target.files[0];
         if (file) {
-            setLoading(true); // Iniciar carga
-            setError(null); // Limpiar errores previos
+            setLoading(true);
+            setError(null);
             const reader = new FileReader();
-            reader.onloadend = async () => { // Hacemos la función asíncrona
+            reader.onloadend = async () => {
                 try {
-                    const img = await loadImage(reader.result); // Usamos la función loadImage
+                    const img = await loadImage(reader.result);
                     setBaseImageSrc(reader.result);
-                    loadedBaseImageRef.current = img; // Almacenar el objeto Image cargado
-                    setWatermarks([]); // Limpiar marcas de agua al cargar nueva imagen base
+                    loadedBaseImageRef.current = img;
+                    setWatermarks([]);
                     setActiveWatermarkId(null);
                     setNextWatermarkId(0);
-                    setLoading(false); // Finalizar carga
-                    drawImagesOnCanvas(); // Redibujar después de cargar la base
+                    setLoading(false);
                 } catch (err) {
                     setError("Error al cargar la imagen base.");
-                    setLoading(false); // Finalizar carga con error
+                    setLoading(false);
                 }
             };
             reader.onerror = () => {
                 setError("Error al cargar la imagen base.");
-                setLoading(false); // Finalizar carga con error
+                setLoading(false);
             };
             reader.readAsDataURL(file);
         }
     };
 
-    // Función para añadir una nueva marca de agua
     const handleAddWatermark = (event) => {
-        // Validar si hay una imagen base cargada
-        // Esta validación se complementa con el botón deshabilitado en el JSX
         if (!baseImageSrc) {
             setError("Por favor, sube una imagen base antes de añadir una marca de agua.");
-            event.target.value = ''; // Limpiar el input de archivo para que el mismo archivo pueda ser seleccionado de nuevo si se intenta sin base
+            event.target.value = '';
             return;
         }
 
         const file = event.target.files[0];
         if (file) {
-            setLoading(true); // Iniciar carga
-            setError(null); // Limpiar errores previos
+            setLoading(true);
+            setError(null);
             const reader = new FileReader();
-            reader.onloadend = async () => { // Hacemos la función asíncrona
+            reader.onloadend = async () => {
                 try {
-                    const img = await loadImage(reader.result); // Usamos la función loadImage
+                    const img = await loadImage(reader.result);
                     const newWatermark = {
                         id: nextWatermarkId,
                         src: reader.result,
                         obj: img,
-                        x: 0, // Posición inicial
-                        y: 0, // Posición inicial
-                        scale: 0.3, // Escala inicial
-                        name: file.name, // Guardar el nombre del archivo de la marca de agua
+                        x: 0,
+                        y: 0,
+                        scale: 0.3,
+                        opacity: 1.0, // La opacidad por defecto es 1.0 (totalmente opaca)
+                        name: file.name,
                     };
                     setWatermarks(prev => [...prev, newWatermark]);
-                    setActiveWatermarkId(newWatermark.id); // Seleccionar la marca de agua recién añadida
+                    setActiveWatermarkId(newWatermark.id);
                     setNextWatermarkId(prev => prev + 1);
-                    setLoading(false); // Finalizar carga
+                    setLoading(false);
                     setError(null);
                 } catch (err) {
                     setError("Error al cargar la imagen de marca de agua.");
-                    setLoading(false); // Finalizar carga con error
+                    setLoading(false);
                 }
             };
             reader.readAsDataURL(file);
@@ -273,11 +272,9 @@ const App = () => {
     };
 
     // --- Funciones para arrastrar la marca de agua ---
-
-    // Función para obtener las coordenadas del evento (ratón o toque) escaladas al tamaño interno del canvas
     const getEventCoords = (event) => {
         const canvas = canvasRef.current;
-        const rect = canvas.getBoundingClientRect(); // Dimensiones del canvas en la pantalla (CSS)
+        const rect = canvas.getBoundingClientRect();
 
         let clientX, clientY;
         if (event.touches && event.touches.length > 0) {
@@ -288,16 +285,12 @@ const App = () => {
             clientY = event.clientY;
         }
 
-        // Calcular las coordenadas relativas al canvas (en píxeles CSS)
         const xCss = clientX - rect.left;
         const yCss = clientY - rect.top;
 
-        // Calcular el factor de escala entre el tamaño CSS del canvas y su tamaño interno (HTML attributes)
-        // Usamos offsetWidth/offsetHeight para obtener el tamaño renderizado del canvas
         const scaleX = canvas.width / canvas.offsetWidth;
         const scaleY = canvas.height / canvas.offsetHeight;
 
-        // Escalar las coordenadas CSS a las coordenadas internas del canvas
         return {
             x: xCss * scaleX,
             y: yCss * scaleY,
@@ -308,7 +301,6 @@ const App = () => {
         const canvas = canvasRef.current;
         if (!canvas || !baseImageSrc) return;
 
-        // Prevenir el comportamiento predeterminado en touchstart para evitar pull-to-refresh
         if (event.touches && event.touches.length > 0) {
             event.preventDefault();
         }
@@ -336,28 +328,26 @@ const App = () => {
             if (activeWatermark) {
                 setInitialWatermarkX(activeWatermark.x);
                 setInitialWatermarkY(activeWatermark.y);
-                activeWatermarkRef.current = activeWatermark; // Guardar referencia a la marca de agua activa
+                activeWatermarkRef.current = activeWatermark;
             }
-            currentDragOffsetRef.current = { dx: 0, dy: 0 }; // Resetear offset al inicio del arrastre
+            currentDragOffsetRef.current = { dx: 0, dy: 0 };
         } else {
             setActiveWatermarkId(null);
-            activeWatermarkRef.current = null; // Limpiar referencia
+            activeWatermarkRef.current = null;
         }
     };
 
     const handleInteractionMove = (event) => {
         if (!isDragging || activeWatermarkId === null || !activeWatermarkRef.current) return;
-        event.preventDefault(); // Prevenir el desplazamiento en dispositivos táctiles
+        event.preventDefault();
 
         const { x, y } = getEventCoords(event);
 
         const dx = x - dragStartX;
         const dy = y - dragStartY;
 
-        // Actualizar el offset en la referencia, no en el estado, para evitar re-renders excesivos
         currentDragOffsetRef.current = { dx, dy };
 
-        // Llamar a requestAnimationFrame para el siguiente fotograma si no hay uno pendiente
         if (!animationFrameIdRef.current) {
             animationFrameIdRef.current = requestAnimationFrame(animateDrag);
         }
@@ -365,7 +355,6 @@ const App = () => {
 
     const handleInteractionEnd = () => {
         if (isDragging && activeWatermarkId !== null && activeWatermarkRef.current) {
-            // Calcular la posición final y actualizar el estado de las marcas de agua
             const finalX = initialWatermarkX + currentDragOffsetRef.current.dx;
             const finalY = initialWatermarkY + currentDragOffsetRef.current.dy;
 
@@ -375,7 +364,6 @@ const App = () => {
                         const scaledWatermarkWidth = wm.obj.width * wm.scale;
                         const scaledWatermarkHeight = wm.obj.height * wm.scale;
 
-                        // Asegurarse de que la posición final esté dentro de los límites del canvas
                         const boundedX = Math.max(0, Math.min(finalX, canvasRef.current.width - scaledWatermarkWidth));
                         const boundedY = Math.max(0, Math.min(finalY, canvasRef.current.height - scaledWatermarkHeight));
 
@@ -387,20 +375,18 @@ const App = () => {
         }
 
         setIsDragging(false);
-        currentDragOffsetRef.current = { dx: 0, dy: 0 }; // Resetear offset
-        activeWatermarkRef.current = null; // Limpiar referencia
+        currentDragOffsetRef.current = { dx: 0, dy: 0 };
+        activeWatermarkRef.current = null;
         if (animationFrameIdRef.current) {
             cancelAnimationFrame(animationFrameIdRef.current);
             animationFrameIdRef.current = null;
         }
-        // Asegurarse de que el canvas se redibuje con el estado final
         drawImagesOnCanvas();
     };
 
     // --- Fin de funciones para arrastrar la marca de agua ---
 
-
-    // Función para manejar el cambio de escala de la marca de agua activa
+    // Función para manejar el cambio de escala
     const handleWatermarkScaleChange = (e) => {
         const newScale = Number(e.target.value);
         if (activeWatermarkId !== null) {
@@ -415,19 +401,30 @@ const App = () => {
         }
     };
 
-    // Función para eliminar la marca de agua activa
-    const handleRemoveWatermark = () => {
+    const handleWatermarkOpacityChange = (e) => {
+        const newOpacity = Number(e.target.value);
         if (activeWatermarkId !== null) {
-            setWatermarks(prevWatermarks => prevWatermarks.filter(wm => wm.id !== activeWatermarkId));
-            setActiveWatermarkId(null); // Deseleccionar después de eliminar
-            setShowAdjustmentPanel(false); // Ocultar panel de ajustes al eliminar
+            setWatermarks(prevWatermarks => {
+                return prevWatermarks.map(wm => {
+                    if (wm.id === activeWatermarkId) {
+                        return { ...wm, opacity: newOpacity };
+                    }
+                    return wm;
+                });
+            });
         }
     };
 
-    // Obtener la marca de agua activa para mostrar sus propiedades en los controles
+    const handleRemoveWatermark = () => {
+        if (activeWatermarkId !== null) {
+            setWatermarks(prevWatermarks => prevWatermarks.filter(wm => wm.id !== activeWatermarkId));
+            setActiveWatermarkId(null);
+            setShowAdjustmentPanel(false);
+        }
+    };
+
     const activeWatermark = watermarks.find(wm => wm.id === activeWatermarkId);
 
-    // Función para descargar la imagen combinada
     const downloadImage = () => {
         const canvas = canvasRef.current;
         if (!canvas || !baseImageSrc) {
@@ -435,43 +432,39 @@ const App = () => {
             return;
         }
 
-        // Crear un canvas temporal para el guardado sin el borde de selección
         const tempCanvas = document.createElement('canvas');
-        // Asegurarse de que el canvas temporal tenga las dimensiones originales de la imagen base
         const originalBaseImage = new Image();
         originalBaseImage.onload = () => {
             tempCanvas.width = originalBaseImage.width;
             tempCanvas.height = originalBaseImage.height;
             const tempCtx = tempCanvas.getContext('2d');
 
-            // Dibujar la imagen base original en el canvas temporal
             tempCtx.drawImage(originalBaseImage, 0, 0);
 
-            // Redibujar las marcas de agua con sus posiciones y escalas relativas a la imagen base original
             for (const watermark of watermarks) {
                 if (watermark.obj) {
-                    // Calcular la escala actual del canvas con respecto a la imagen base original
                     const currentCanvasScaleX = canvas.width / originalBaseImage.width;
                     const currentCanvasScaleY = canvas.height / originalBaseImage.height;
 
-                    // Ajustar las posiciones y escalas de las marcas de agua a las dimensiones originales
                     const originalWatermarkX = watermark.x / currentCanvasScaleX;
                     const originalWatermarkY = watermark.y / currentCanvasScaleY;
                     const originalWatermarkWidth = watermark.obj.width * watermark.scale / currentCanvasScaleX;
                     const originalWatermarkHeight = watermark.obj.height * watermark.scale / currentCanvasScaleY;
 
+                    // La opacidad de la marca de agua es siempre 1.0 en el código actual, no es configurable
+                    tempCtx.globalAlpha = watermark.opacity;
                     tempCtx.drawImage(watermark.obj, originalWatermarkX, originalWatermarkY, originalWatermarkWidth, originalWatermarkHeight);
+                    tempCtx.globalAlpha = 1.0; // Restablece la opacidad
                 }
             }
 
-            // Descargar la imagen del canvas temporal
             const link = document.createElement('a');
             link.download = 'imagen_con_marcas_de_agua.png';
             link.href = tempCanvas.toDataURL('image/png');
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-            setError(null); // Limpiar cualquier error anterior
+            setError(null);
         };
         originalBaseImage.onerror = () => {
             setError("Error al cargar la imagen base original para la descarga.");
@@ -479,31 +472,25 @@ const App = () => {
         originalBaseImage.src = baseImageSrc;
     };
 
-    // Función para reiniciar la aplicación a su estado inicial
     const handleReset = () => {
         setBaseImageSrc(null);
-        loadedBaseImageRef.current = null; // Limpiar la referencia de la imagen base cargada
+        loadedBaseImageRef.current = null;
         setWatermarks([]);
         setNextWatermarkId(0);
         setActiveWatermarkId(null);
         setLoading(false);
         setError(null);
-        setShowAdjustmentPanel(false); // Ocultar panel de ajustes
-        setShowHelpModal(false); // Ocultar panel de ayuda
-        // Opcional: Limpiar los inputs de archivo si es necesario, aunque key={nextWatermarkId} ya ayuda
+        setShowAdjustmentPanel(false);
+        setShowHelpModal(false);
         if (baseImageInputRef.current) baseImageInputRef.current.value = '';
         if (watermarkInputRef.current) watermarkInputRef.current.value = '';
     };
 
-
-    // --- NUEVO HOOK para manejar el botón de retroceso en el navegador ---
     useEffect(() => {
         const isModalOpen = showAdjustmentPanel || showHelpModal;
 
         const handlePopstate = (e) => {
             if (isModalOpen) {
-                // Previene el comportamiento predeterminado del navegador (navegar hacia atrás)
-                // y simplemente cierra el modal.
                 e.preventDefault();
                 setShowAdjustmentPanel(false);
                 setShowHelpModal(false);
@@ -511,34 +498,26 @@ const App = () => {
         };
 
         if (isModalOpen) {
-            // Agrega un nuevo estado al historial del navegador.
-            // Esto permite al botón de retroceso cerrar el modal sin salir de la página.
             window.history.pushState(null, '', '#modal-open');
             window.addEventListener('popstate', handlePopstate);
         }
 
-        // Función de limpieza para eliminar el listener y corregir el historial cuando el modal se cierra.
         return () => {
             if (isModalOpen) {
                 window.removeEventListener('popstate', handlePopstate);
-                // Si el modal se cerró con un clic, necesitamos retroceder el historial
-                // para que el botón de retroceso funcione como se espera después.
                 if (window.location.hash === '#modal-open') {
                     window.history.back();
                 }
             }
         };
-    }, [showAdjustmentPanel, showHelpModal]); // Este efecto se ejecuta cada vez que un modal se abre o se cierra.
-
+    }, [showAdjustmentPanel, showHelpModal]);
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-blue-100 to-purple-200 p-4 sm:p-6 flex flex-col items-center font-sans relative">
-            {/* Tailwind CSS y Google Fonts ya están en public/index.html */}
+        <div className="min-h-screen bg-gray-100 p-4 sm:p-6 flex flex-col items-center font-sans relative">
             <style>
                 {`
                 body {
                     font-family: 'Inter', sans-serif;
-                    /* Previene el pull-to-refresh en navegadores móviles */
                     overscroll-behavior-y: contain;
                 }
                 input[type="range"]::-webkit-slider-thumb {
@@ -547,7 +526,7 @@ const App = () => {
                     width: 20px;
                     height: 20px;
                     border-radius: 50%;
-                    background: #6366f1; /* Indigo 500 */
+                    background: #6366f1;
                     cursor: pointer;
                     box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.3);
                     transition: background .15s ease-in-out;
@@ -556,7 +535,7 @@ const App = () => {
                     width: 20px;
                     height: 20px;
                     border-radius: 50%;
-                    background: #6366f1; /* Indigo 500 */
+                    background: #6366f1;
                     cursor: pointer;
                     box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.3);
                     transition: background .15s ease-in-out;
@@ -564,30 +543,30 @@ const App = () => {
                 input[type="range"]::-webkit-slider-runnable-track {
                     width: 100%;
                     height: 8px;
-                    background: #e0e7ff; /* Indigo 100 */
+                    background: #e0e7ff;
                     border-radius: 4px;
                 }
                 input[type="range"]::-moz-range-track {
                     width: 100%;
                     height: 8px;
-                    background: #e0e7ff; /* Indigo 100 */
+                    background: #e0e7ff;
                     border-radius: 4px;
                 }
                 .icon-button {
                     display: flex;
                     justify-content: center;
                     align-items: center;
-                    width: 44px; /* Tamaño del botón reducido */
-                    height: 44px; /* Tamaño del botón reducido */
+                    width: 44px;
+                    height: 44px;
                     border-radius: 50%;
-                    background-color: #6366f1; /* Indigo 500 */
+                    background-color: #6366f1;
                     color: white;
                     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
                     transition: background-color 0.3s ease, transform 0.2s ease;
                     cursor: pointer;
                 }
                 .icon-button:hover {
-                    background-color: #4f46e5; /* Indigo 600 */
+                    background-color: #4f46e5;
                     transform: scale(1.05);
                 }
                 .icon-button:active {
@@ -596,7 +575,6 @@ const App = () => {
                 `}
             </style>
 
-            {/* Título de la aplicación - Tamaño de fuente disminuido */}
             <h1 className="text-xl sm:text-2xl font-bold text-indigo-800 mb-2 text-center">
                 Editor de Imágenes con Marca de Agua
             </h1>
@@ -604,8 +582,10 @@ const App = () => {
                 Por: Javier Valverde Salvatierra
             </p>
 
-            {/* Contenedor principal de la aplicación - ahora con flex-grow y max-height */}
-            <div className="bg-white p-6 rounded-xl shadow-lg w-full max-w-4xl flex justify-center items-center overflow-hidden border border-gray-300 flex-grow max-h-[70vh] min-h-[300px]">
+            <div
+                ref={canvasContainerRef}
+                className="bg-white p-6 rounded-xl shadow-lg w-full max-w-4xl flex justify-center items-center overflow-hidden border border-gray-300 flex-grow max-h-[70vh] min-h-[300px]"
+            >
                 <canvas
                     ref={canvasRef}
                     className="max-w-full h-auto rounded-lg"
@@ -620,15 +600,13 @@ const App = () => {
                 ></canvas>
             </div>
 
-            {/* Panel de Acciones - Ahora debajo del canvas y no fijo */}
-            <div className="w-full max-w-4xl flex flex-wrap justify-center gap-2 mt-4 mb-8 p-2 bg-white bg-opacity-90 rounded-xl shadow-lg">
-                {/* Botón para Seleccionar Imagen Base */}
+            <div className="w-full max-w-4xl flex flex-wrap justify-center gap-2 mt-4 mb-8 p-2 bg-white rounded-xl shadow-lg">
                 <button
                     onClick={() => baseImageInputRef.current.click()}
                     className="icon-button"
                     title="Seleccionar Imagen Base: Sube la imagen principal sobre la que trabajarás."
                 >
-                    <FileUp size={20} /> {/* Tamaño del icono reducido */}
+                    <FileUp size={20} />
                 </button>
                 <input
                     type="file"
@@ -639,14 +617,13 @@ const App = () => {
                     ref={baseImageInputRef}
                 />
 
-                {/* Botón para Añadir Marca de Agua */}
                 <button
                     onClick={() => watermarkInputRef.current.click()}
                     className={`icon-button ${!baseImageSrc ? 'opacity-50 cursor-not-allowed' : ''}`}
                     title="Añadir Marca de Agua: Sube una imagen para usarla como marca de agua. Requiere una imagen base."
-                    disabled={!baseImageSrc} // Deshabilita si no hay imagen base
+                    disabled={!baseImageSrc}
                 >
-                    <ImagePlus size={20} /> {/* Tamaño del icono reducido */}
+                    <ImagePlus size={20} />
                 </button>
                 <input
                     type="file"
@@ -658,49 +635,47 @@ const App = () => {
                     key={nextWatermarkId}
                 />
 
-                {/* Nuevo Botón para Activar/Desactivar Panel de Ajustes */}
                 <button
                     onClick={() => setShowAdjustmentPanel(prev => !prev)}
                     className="icon-button bg-blue-500 hover:bg-blue-600"
                     title="Ajustar Marca de Agua: Abre un panel para cambiar la escala o eliminar la marca de agua seleccionada."
                 >
-                    <SlidersHorizontal size={20} /> {/* Tamaño del icono reducido */}
+                    <SlidersHorizontal size={20} />
                 </button>
 
-                {/* Botón para Reiniciar */}
                 <button
                     onClick={handleReset}
                     className="icon-button bg-gray-500 hover:bg-gray-600"
                     title="Reiniciar: Borra todas las imágenes y marcas de agua, y restablece la aplicación."
                 >
-                    <RotateCcw size={20} /> {/* Tamaño del icono reducido */}
+                    <RotateCcw size={20} />
                 </button>
 
-                {/* Botón para Descargar Imagen */}
                 <button
                     onClick={downloadImage}
                     className="icon-button bg-green-500 hover:bg-green-600"
                     title="Descargar Imagen: Guarda la imagen base con todas las marcas de agua aplicadas."
                 >
-                    <Download size={20} /> {/* Tamaño del icono reducido */}
+                    <Download size={20} />
                 </button>
 
-                {/* Nuevo Botón de Ayuda */}
                 <button
                     onClick={() => setShowHelpModal(prev => !prev)}
                     className="icon-button bg-purple-500 hover:bg-purple-600"
                     title="Ayuda: Muestra información sobre el uso de cada botón."
                 >
-                    <HelpCircle size={20} /> {/* Tamaño del icono reducido */}
+                    <HelpCircle size={20} />
                 </button>
             </div>
 
-            {/* Modal de Ajustes de Marca de Agua (condicional) */}
             {showAdjustmentPanel && activeWatermark && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50"
-                     onClick={() => setShowAdjustmentPanel(false)}> {/* Cierra el modal al hacer clic en el overlay */}
-                    <div className="bg-white p-6 rounded-xl shadow-lg flex flex-col gap-4 w-11/12 max-w-sm"
-                         onClick={e => e.stopPropagation()}> {/* Evita que el clic dentro del modal lo cierre */}
+                // Fondo semitransparente para el modal, ahora bg-black/50 para que sea más notable
+                <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50"
+                     onClick={() => setShowAdjustmentPanel(false)}>
+                    {/* Panel de ajustes con la opacidad controlada por el estado modalOpacity */}
+                    <div className="p-6 rounded-xl shadow-lg flex flex-col gap-4 w-11/12 max-w-sm"
+                         style={{ backgroundColor: `rgba(255, 255, 255, ${modalOpacity})` }}
+                         onClick={e => e.stopPropagation()}>
                         <h3 className="text-xl font-semibold text-gray-700 mb-2">Ajustar Marca de Agua</h3>
                         <div className="mb-4">
                             <label htmlFor="watermarkScale" className="block text-gray-700 text-sm font-medium mb-2">
@@ -714,6 +689,22 @@ const App = () => {
                                 step="0.01"
                                 value={activeWatermark.scale}
                                 onChange={handleWatermarkScaleChange}
+                                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                            />
+                        </div>
+                        {/* Nuevo control de opacidad para el panel modal */}
+                        <div className="mb-4">
+                            <label htmlFor="modalOpacity" className="block text-gray-700 text-sm font-medium mb-2">
+                                Opacidad del Panel: {(modalOpacity * 100).toFixed(0)}%
+                            </label>
+                            <input
+                                type="range"
+                                id="modalOpacity"
+                                min="0.1"
+                                max="1.0"
+                                step="0.01"
+                                value={modalOpacity}
+                                onChange={(e) => setModalOpacity(Number(e.target.value))}
                                 className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
                             />
                         </div>
@@ -731,12 +722,13 @@ const App = () => {
                 </div>
             )}
 
-            {/* Nuevo Modal de Ayuda (condicional) */}
             {showHelpModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50"
-                     onClick={() => setShowHelpModal(false)}> {/* Este es el overlay oscuro. Al hacer clic aquí, se oculta el modal */}
+                // Fondo semitransparente para el modal de ayuda
+                <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50"
+                     onClick={() => setShowHelpModal(false)}>
+                    {/* Contenido del modal de ayuda, con fondo blanco y opaco */}
                     <div className="bg-white p-6 rounded-xl shadow-lg flex flex-col gap-4 w-11/12 max-w-lg"
-                         onClick={e => e.stopPropagation()}> {/* Evita que el clic en el contenido del modal lo cierre */}
+                         onClick={e => e.stopPropagation()}>
                         <h3 className="text-xl font-semibold text-gray-700 mb-4 text-center">Ayuda de la Aplicación</h3>
                         <ul className="space-y-3 text-gray-700">
                             <li className="flex items-center gap-3">
@@ -754,7 +746,7 @@ const App = () => {
                             <li className="flex items-center gap-3">
                                 <SlidersHorizontal size={24} className="text-blue-600 flex-shrink-0" />
                                 <div>
-                                    <strong className="font-semibold">Ajustar Marca de Agua:</strong> Abre un panel para cambiar la escala o eliminar la marca de agua seleccionada. Haz clic en una marca de agua en el lienzo para seleccionarla. **Puedes reubicar cualquier marca de agua arrastrándola directamente en la imagen.**
+                                    <strong className="font-semibold">Ajustar Marca de Agua:</strong> Abre un panel para cambiar la escala o la opacidad de la marca de agua seleccionada. Haz clic en una marca de agua en el lienzo para seleccionarla. **Puedes reubicar cualquier marca de agua arrastrándola directamente en la imagen.**
                                 </div>
                             </li>
                             <li className="flex items-center gap-3">
@@ -780,7 +772,6 @@ const App = () => {
                 </div>
             )}
 
-            {/* Mensajes de carga y error (pueden aparecer en una posición fija o relativa) */}
             {loading && (
                 <p className="fixed bottom-4 left-4 z-50 text-indigo-500 bg-white p-2 rounded-lg shadow-md">Cargando...</p>
             )}
@@ -792,6 +783,7 @@ const App = () => {
 };
 
 export default App;
+
 
 
 
