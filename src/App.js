@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-// Importa los iconos de Lucide React, incluyendo HelpCircle para el botón de ayuda
-import { FileUp, ImagePlus, RotateCcw, Download, SlidersHorizontal, Trash2, HelpCircle } from 'lucide-react';
+// Importa los iconos de Lucide React, incluyendo HelpCircle para el botón de ayuda y Type para el texto
+import { FileUp, ImagePlus, RotateCcw, Download, SlidersHorizontal, Trash2, HelpCircle, Type } from 'lucide-react';
 
 // Componente principal de la aplicación
 const App = () => {
@@ -9,23 +9,31 @@ const App = () => {
     const [watermarks, setWatermarks] = useState([]); // [{ id, src, obj, x, y, scale, opacity, name }]
     const [nextWatermarkId, setNextWatermarkId] = useState(0); // Para generar IDs únicos para las marcas de agua
     const [activeWatermarkId, setActiveWatermarkId] = useState(null); // ID de la marca de agua actualmente seleccionada
+
+    // Estados para el texto
+    const [texts, setTexts] = useState([]); // [{ id, content, x, y, fontSize, color }]
+    const [nextTextId, setNextTextId] = useState(0);
+    const [activeTextId, setActiveTextId] = useState(null);
+    const [newTextContent, setNewTextContent] = useState(''); // Para el input de texto del modal
+
     const [loading, setLoading] = useState(false); // Estado de carga
     const [error, setError] = useState(null); // Estado de error
     const [showAdjustmentPanel, setShowAdjustmentPanel] = useState(false); // Controla la visibilidad del panel de ajustes modal
     const [showHelpModal, setShowHelpModal] = useState(false); // Nuevo estado para controlar la visibilidad del modal de ayuda
+    const [showAddTextModal, setShowAddTextModal] = useState(false); // Nuevo estado para el modal de añadir texto
     const [modalOpacity, setModalOpacity] = useState(1.0); // Nuevo estado para la opacidad del modal
 
     // Estados para la funcionalidad de arrastre
     const [isDragging, setIsDragging] = useState(false);
     const [dragStartX, setDragStartX] = useState(0);
     const [dragStartY, setDragStartY] = useState(0);
-    const [initialWatermarkX, setInitialWatermarkX] = useState(0);
-    const [initialWatermarkY, setInitialWatermarkY] = useState(0);
+    const [initialElementX, setInitialElementX] = useState(0);
+    const [initialElementY, setInitialElementY] = useState(0);
 
     // Referencias para el arrastre y la animación
     const currentDragOffsetRef = useRef({ dx: 0, dy: 0 }); // Almacena el desplazamiento actual durante el arrastre
     const animationFrameIdRef = useRef(null); // ID del requestAnimationFrame para cancelar
-    const activeWatermarkRef = useRef(null); // Referencia a la marca de agua activa para manipulación directa durante el arrastre
+    const activeElementRef = useRef(null); // Referencia al elemento activo (marca de agua o texto)
     const loadedBaseImageRef = useRef(null); // Referencia para almacenar el objeto Image de la imagen base ya cargada
 
     // Referencias al elemento canvas y a los inputs de archivo
@@ -36,8 +44,8 @@ const App = () => {
     // Referencia para el contenedor del canvas, que observaremos con ResizeObserver
     const canvasContainerRef = useRef(null);
 
-    // Usamos un Map para almacenar los límites de cada marca de agua por su ID
-    const allWatermarkBounds = useRef(new Map());
+    // Usamos un Map para almacenar los límites de cada elemento (marca de agua o texto) por su ID
+    const allElementBounds = useRef(new Map());
 
     // Función auxiliar para cargar una imagen
     const loadImage = useCallback((src) => {
@@ -49,8 +57,7 @@ const App = () => {
         });
     }, []);
 
-    // Función para dibujar las imágenes en el canvas
-    // Ahora acepta un dragOffset opcional para dibujar la marca de agua activa en su posición temporal
+    // Función para dibujar las imágenes y el texto en el canvas
     const drawImagesOnCanvas = useCallback(async (drawSelectionBorder = true, dragOffset = { dx: 0, dy: 0 }) => {
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -60,6 +67,7 @@ const App = () => {
 
         try {
             const baseImage = loadedBaseImageRef.current;
+            allElementBounds.current.clear(); // Limpiar los límites antes de redibujar
 
             if (baseImage && baseImageSrc) {
                 // Lógica para redimensionar la imagen base para ajustarse al canvas
@@ -92,9 +100,9 @@ const App = () => {
                     let currentX = watermark.x;
                     let currentY = watermark.y;
 
-                    if (isDragging && activeWatermarkId === watermark.id && activeWatermarkRef.current) {
-                        currentX = initialWatermarkX + dragOffset.dx;
-                        currentY = initialWatermarkY + dragOffset.dy;
+                    if (isDragging && activeWatermarkId === watermark.id && activeElementRef.current) {
+                        currentX = initialElementX + dragOffset.dx;
+                        currentY = initialElementY + dragOffset.dy;
                     }
 
                     const scaledWatermarkWidth = watermark.obj.width * watermark.scale;
@@ -103,15 +111,12 @@ const App = () => {
                     const actualX = Math.max(0, Math.min(currentX, canvas.width - scaledWatermarkWidth));
                     const actualY = Math.max(0, Math.min(currentY, canvas.height - scaledWatermarkHeight));
 
-                    // Aplica la opacidad a la marca de agua antes de dibujarla
                     ctx.globalAlpha = watermark.opacity;
-
                     ctx.drawImage(watermark.obj, actualX, actualY, scaledWatermarkWidth, scaledWatermarkHeight);
-
-                    // Restablece la opacidad del contexto a 1.0 para que otros elementos no se vean afectados
                     ctx.globalAlpha = 1.0;
 
-                    allWatermarkBounds.current.set(watermark.id, {
+                    allElementBounds.current.set(`watermark-${watermark.id}`, {
+                        type: 'watermark',
                         x: actualX,
                         y: actualY,
                         width: scaledWatermarkWidth,
@@ -126,23 +131,66 @@ const App = () => {
                 }
             }
 
-            if (!baseImageSrc && watermarks.length === 0) {
+            // Dibujar todos los elementos de texto
+            for (const text of texts) {
+                if (baseImage) {
+                    let currentX = text.x;
+                    let currentY = text.y;
+
+                    if (isDragging && activeTextId === text.id && activeElementRef.current) {
+                        currentX = initialElementX + dragOffset.dx;
+                        currentY = initialElementY + dragOffset.dy;
+                    }
+
+                    ctx.font = `${text.fontSize}px 'Inter'`;
+                    ctx.fillStyle = text.color;
+                    ctx.globalAlpha = text.opacity;
+                    ctx.textAlign = 'left';
+                    ctx.textBaseline = 'top';
+
+                    const textMetrics = ctx.measureText(text.content);
+                    const textWidth = textMetrics.width;
+                    const textHeight = text.fontSize * 1.2; // Altura aproximada
+
+                    const actualX = Math.max(0, Math.min(currentX, canvas.width - textWidth));
+                    const actualY = Math.max(0, Math.min(currentY, canvas.height - textHeight));
+
+                    ctx.fillText(text.content, actualX, actualY);
+                    ctx.globalAlpha = 1.0;
+
+                    allElementBounds.current.set(`text-${text.id}`, {
+                        type: 'text',
+                        x: actualX,
+                        y: actualY,
+                        width: textWidth,
+                        height: textHeight,
+                    });
+
+                    if (drawSelectionBorder && activeTextId === text.id) {
+                        ctx.strokeStyle = '#f59e0b';
+                        ctx.lineWidth = 3;
+                        ctx.strokeRect(actualX, actualY, textWidth, textHeight);
+                    }
+                }
+            }
+
+            if (!baseImageSrc && watermarks.length === 0 && texts.length === 0) {
                  ctx.fillStyle = '#888';
                  ctx.font = '16px Inter';
                  ctx.textAlign = 'center';
-                 ctx.fillText('Sube una imagen base y luego añade marcas de agua', canvas.width / 2, canvas.height / 2 + 30);
-            } else if (baseImageSrc && watermarks.length === 0) {
+                 ctx.fillText('Sube una imagen base y luego añade marcas de agua o texto', canvas.width / 2, canvas.height / 2 + 30);
+            } else if (baseImageSrc && watermarks.length === 0 && texts.length === 0) {
                 ctx.fillStyle = '#888';
                 ctx.font = '16px Inter';
                 ctx.textAlign = 'center';
-                ctx.fillText('Haz clic en "Añadir Marca de Agua" para empezar', canvas.width / 2, canvas.height / 2 + 30);
+                ctx.fillText('Añade una Marca de Agua o un Texto', canvas.width / 2, canvas.height / 2 + 30);
             }
 
 
         } catch (err) {
             console.error("Error al dibujar en el canvas:", err);
         }
-    }, [baseImageSrc, watermarks, activeWatermarkId, isDragging, initialWatermarkX, initialWatermarkY]);
+    }, [baseImageSrc, watermarks, texts, activeWatermarkId, activeTextId, isDragging, initialElementX, initialElementY]);
 
     const animateDrag = useCallback(() => {
         drawImagesOnCanvas(true, currentDragOffsetRef.current);
@@ -178,12 +226,10 @@ const App = () => {
         let animationFrameId = null;
 
         const resizeCanvas = () => {
-            // Cancela cualquier frame pendiente para evitar múltiples llamadas en rápida sucesión
             if (animationFrameId) {
                 cancelAnimationFrame(animationFrameId);
             }
 
-            // Programa el redimensionamiento para el próximo frame de animación
             animationFrameId = requestAnimationFrame(() => {
                 canvas.width = container.clientWidth;
                 canvas.height = container.clientHeight;
@@ -194,7 +240,6 @@ const App = () => {
         const resizeObserver = new ResizeObserver(resizeCanvas);
         resizeObserver.observe(container);
 
-        // Limpieza: Desobservar el contenedor y cancelar el frame de animación pendiente
         return () => {
             if (animationFrameId) {
                 cancelAnimationFrame(animationFrameId);
@@ -216,8 +261,11 @@ const App = () => {
                     setBaseImageSrc(reader.result);
                     loadedBaseImageRef.current = img;
                     setWatermarks([]);
+                    setTexts([]);
                     setActiveWatermarkId(null);
+                    setActiveTextId(null);
                     setNextWatermarkId(0);
+                    setNextTextId(0);
                     setLoading(false);
                 } catch (err) {
                     setError("Error al cargar la imagen base.");
@@ -254,11 +302,12 @@ const App = () => {
                         x: 0,
                         y: 0,
                         scale: 0.3,
-                        opacity: 1.0, // La opacidad por defecto es 1.0 (totalmente opaca)
+                        opacity: 1.0,
                         name: file.name,
                     };
                     setWatermarks(prev => [...prev, newWatermark]);
                     setActiveWatermarkId(newWatermark.id);
+                    setActiveTextId(null);
                     setNextWatermarkId(prev => prev + 1);
                     setLoading(false);
                     setError(null);
@@ -268,6 +317,34 @@ const App = () => {
                 }
             };
             reader.readAsDataURL(file);
+        }
+    };
+
+    const handleAddText = () => {
+        if (!baseImageSrc) {
+            setError("Por favor, sube una imagen base antes de añadir texto.");
+            return;
+        }
+        setShowAddTextModal(true);
+    };
+
+    const handleCreateText = () => {
+        if (newTextContent.trim() !== '') {
+            const newText = {
+                id: nextTextId,
+                content: newTextContent,
+                x: 50,
+                y: 50,
+                fontSize: 30,
+                color: '#000000',
+                opacity: 1.0,
+            };
+            setTexts(prev => [...prev, newText]);
+            setActiveTextId(newText.id);
+            setActiveWatermarkId(null);
+            setNextTextId(prev => prev + 1);
+            setNewTextContent('');
+            setShowAddTextModal(false);
         }
     };
 
@@ -306,39 +383,47 @@ const App = () => {
         }
 
         const { x, y } = getEventCoords(event);
-        let clickedWatermarkId = null;
-        const watermarksArray = Array.from(allWatermarkBounds.current.entries());
-        for (let i = watermarksArray.length - 1; i >= 0; i--) {
-            const [id, bounds] = watermarksArray[i];
-            if (x >= bounds.x &&
-                x <= bounds.x + bounds.width &&
-                y >= bounds.y &&
-                y <= bounds.y + bounds.height) {
-                clickedWatermarkId = id;
+        let clickedElementId = null;
+        let clickedElementType = null;
+        const elementsArray = Array.from(allElementBounds.current.entries());
+
+        for (let i = elementsArray.length - 1; i >= 0; i--) {
+            const [id, bounds] = elementsArray[i];
+            if (x >= bounds.x && x <= bounds.x + bounds.width && y >= bounds.y && y <= bounds.y + bounds.height) {
+                clickedElementId = id;
+                clickedElementType = bounds.type;
                 break;
             }
         }
 
-        if (clickedWatermarkId !== null) {
-            setActiveWatermarkId(clickedWatermarkId);
+        if (clickedElementId !== null) {
+            if (clickedElementType === 'watermark') {
+                setActiveWatermarkId(Number(clickedElementId.split('-')[1]));
+                setActiveTextId(null);
+                activeElementRef.current = watermarks.find(w => w.id === Number(clickedElementId.split('-')[1]));
+            } else if (clickedElementType === 'text') {
+                setActiveTextId(Number(clickedElementId.split('-')[1]));
+                setActiveWatermarkId(null);
+                activeElementRef.current = texts.find(t => t.id === Number(clickedElementId.split('-')[1]));
+            }
+
             setIsDragging(true);
             setDragStartX(x);
             setDragStartY(y);
-            const activeWatermark = watermarks.find(w => w.id === clickedWatermarkId);
-            if (activeWatermark) {
-                setInitialWatermarkX(activeWatermark.x);
-                setInitialWatermarkY(activeWatermark.y);
-                activeWatermarkRef.current = activeWatermark;
+            if (activeElementRef.current) {
+                setInitialElementX(activeElementRef.current.x);
+                setInitialElementY(activeElementRef.current.y);
             }
             currentDragOffsetRef.current = { dx: 0, dy: 0 };
         } else {
             setActiveWatermarkId(null);
-            activeWatermarkRef.current = null;
+            setActiveTextId(null);
+            activeElementRef.current = null;
         }
     };
 
     const handleInteractionMove = (event) => {
-        if (!isDragging || activeWatermarkId === null || !activeWatermarkRef.current) return;
+        if (!isDragging || !activeElementRef.current) return;
         event.preventDefault();
 
         const { x, y } = getEventCoords(event);
@@ -354,29 +439,43 @@ const App = () => {
     };
 
     const handleInteractionEnd = () => {
-        if (isDragging && activeWatermarkId !== null && activeWatermarkRef.current) {
-            const finalX = initialWatermarkX + currentDragOffsetRef.current.dx;
-            const finalY = initialWatermarkY + currentDragOffsetRef.current.dy;
+        if (isDragging && activeElementRef.current) {
+            const finalX = initialElementX + currentDragOffsetRef.current.dx;
+            const finalY = initialElementY + currentDragOffsetRef.current.dy;
 
-            setWatermarks(prevWatermarks => {
-                return prevWatermarks.map(wm => {
-                    if (wm.id === activeWatermarkId) {
-                        const scaledWatermarkWidth = wm.obj.width * wm.scale;
-                        const scaledWatermarkHeight = wm.obj.height * wm.scale;
+            if (activeWatermarkId !== null) {
+                setWatermarks(prevWatermarks => {
+                    return prevWatermarks.map(wm => {
+                        if (wm.id === activeWatermarkId) {
+                            const scaledWatermarkWidth = wm.obj.width * wm.scale;
+                            const scaledWatermarkHeight = wm.obj.height * wm.scale;
 
-                        const boundedX = Math.max(0, Math.min(finalX, canvasRef.current.width - scaledWatermarkWidth));
-                        const boundedY = Math.max(0, Math.min(finalY, canvasRef.current.height - scaledWatermarkHeight));
+                            const boundedX = Math.max(0, Math.min(finalX, canvasRef.current.width - scaledWatermarkWidth));
+                            const boundedY = Math.max(0, Math.min(finalY, canvasRef.current.height - scaledWatermarkHeight));
 
-                        return { ...wm, x: boundedX, y: boundedY };
-                    }
-                    return wm;
+                            return { ...wm, x: boundedX, y: boundedY };
+                        }
+                        return wm;
+                    });
                 });
-            });
+            } else if (activeTextId !== null) {
+                setTexts(prevTexts => {
+                    return prevTexts.map(txt => {
+                        if (txt.id === activeTextId) {
+                             const boundedX = Math.max(0, Math.min(finalX, canvasRef.current.width - 100)); // Ancho aproximado
+                             const boundedY = Math.max(0, Math.min(finalY, canvasRef.current.height - txt.fontSize));
+
+                             return { ...txt, x: boundedX, y: boundedY };
+                        }
+                        return txt;
+                    });
+                });
+            }
         }
 
         setIsDragging(false);
         currentDragOffsetRef.current = { dx: 0, dy: 0 };
-        activeWatermarkRef.current = null;
+        activeElementRef.current = null;
         if (animationFrameIdRef.current) {
             cancelAnimationFrame(animationFrameIdRef.current);
             animationFrameIdRef.current = null;
@@ -384,47 +483,76 @@ const App = () => {
         drawImagesOnCanvas();
     };
 
-    // --- Fin de funciones para arrastrar la marca de agua ---
+    // --- Fin de funciones para arrastrar ---
 
-    // Función para manejar el cambio de escala
+    // Funciones para ajustes
     const handleWatermarkScaleChange = (e) => {
         const newScale = Number(e.target.value);
         if (activeWatermarkId !== null) {
             setWatermarks(prevWatermarks => {
-                return prevWatermarks.map(wm => {
-                    if (wm.id === activeWatermarkId) {
-                        return { ...wm, scale: newScale };
-                    }
-                    return wm;
-                });
+                return prevWatermarks.map(wm => (wm.id === activeWatermarkId) ? { ...wm, scale: newScale } : wm);
             });
         }
     };
 
-    // Nueva función para manejar el cambio de opacidad de la marca de agua
     const handleWatermarkOpacityChange = (e) => {
         const newOpacity = Number(e.target.value);
         if (activeWatermarkId !== null) {
             setWatermarks(prevWatermarks => {
-                return prevWatermarks.map(wm => {
-                    if (wm.id === activeWatermarkId) {
-                        return { ...wm, opacity: newOpacity };
-                    }
-                    return wm;
-                });
+                return prevWatermarks.map(wm => (wm.id === activeWatermarkId) ? { ...wm, opacity: newOpacity } : wm);
             });
         }
     };
 
-    const handleRemoveWatermark = () => {
-        if (activeWatermarkId !== null) {
-            setWatermarks(prevWatermarks => prevWatermarks.filter(wm => wm.id !== activeWatermarkId));
-            setActiveWatermarkId(null);
-            setShowAdjustmentPanel(false);
+    const handleTextContentChange = (e) => {
+        const newContent = e.target.value;
+        if (activeTextId !== null) {
+            setTexts(prevTexts => {
+                return prevTexts.map(txt => (txt.id === activeTextId) ? { ...txt, content: newContent } : txt);
+            });
         }
     };
 
+    const handleTextFontSizeChange = (e) => {
+        const newSize = Number(e.target.value);
+        if (activeTextId !== null) {
+            setTexts(prevTexts => {
+                return prevTexts.map(txt => (txt.id === activeTextId) ? { ...txt, fontSize: newSize } : txt);
+            });
+        }
+    };
+
+    const handleTextColorChange = (e) => {
+        const newColor = e.target.value;
+        if (activeTextId !== null) {
+            setTexts(prevTexts => {
+                return prevTexts.map(txt => (txt.id === activeTextId) ? { ...txt, color: newColor } : txt);
+            });
+        }
+    };
+
+    const handleTextOpacityChange = (e) => {
+        const newOpacity = Number(e.target.value);
+        if (activeTextId !== null) {
+            setTexts(prevTexts => {
+                return prevTexts.map(txt => (txt.id === activeTextId) ? { ...txt, opacity: newOpacity } : txt);
+            });
+        }
+    };
+
+    const handleRemoveElement = () => {
+        if (activeWatermarkId !== null) {
+            setWatermarks(prevWatermarks => prevWatermarks.filter(wm => wm.id !== activeWatermarkId));
+            setActiveWatermarkId(null);
+        } else if (activeTextId !== null) {
+            setTexts(prevTexts => prevTexts.filter(txt => txt.id !== activeTextId));
+            setActiveTextId(null);
+        }
+        setShowAdjustmentPanel(false);
+    };
+
     const activeWatermark = watermarks.find(wm => wm.id === activeWatermarkId);
+    const activeText = texts.find(txt => txt.id === activeTextId);
 
     const downloadImage = () => {
         const canvas = canvasRef.current;
@@ -452,15 +580,31 @@ const App = () => {
                     const originalWatermarkWidth = watermark.obj.width * watermark.scale / currentCanvasScaleX;
                     const originalWatermarkHeight = watermark.obj.height * watermark.scale / currentCanvasScaleY;
 
-                    // La opacidad de la marca de agua es siempre 1.0 en el código actual, no es configurable
                     tempCtx.globalAlpha = watermark.opacity;
                     tempCtx.drawImage(watermark.obj, originalWatermarkX, originalWatermarkY, originalWatermarkWidth, originalWatermarkHeight);
-                    tempCtx.globalAlpha = 1.0; // Restablece la opacidad
+                    tempCtx.globalAlpha = 1.0;
                 }
             }
 
+            for (const text of texts) {
+                const currentCanvasScaleX = canvas.width / originalBaseImage.width;
+                const currentCanvasScaleY = canvas.height / originalBaseImage.height;
+
+                const originalTextX = text.x / currentCanvasScaleX;
+                const originalTextY = text.y / currentCanvasScaleY;
+                const originalFontSize = text.fontSize / currentCanvasScaleY;
+
+                tempCtx.font = `${originalFontSize}px 'Inter'`;
+                tempCtx.fillStyle = text.color;
+                tempCtx.globalAlpha = text.opacity;
+                tempCtx.textAlign = 'left';
+                tempCtx.textBaseline = 'top';
+                tempCtx.fillText(text.content, originalTextX, originalTextY);
+                tempCtx.globalAlpha = 1.0;
+            }
+
             const link = document.createElement('a');
-            link.download = 'imagen_con_marcas_de_agua.png';
+            link.download = 'imagen_editada.png';
             link.href = tempCanvas.toDataURL('image/png');
             document.body.appendChild(link);
             link.click();
@@ -477,24 +621,29 @@ const App = () => {
         setBaseImageSrc(null);
         loadedBaseImageRef.current = null;
         setWatermarks([]);
+        setTexts([]);
         setNextWatermarkId(0);
+        setNextTextId(0);
         setActiveWatermarkId(null);
+        setActiveTextId(null);
         setLoading(false);
         setError(null);
         setShowAdjustmentPanel(false);
         setShowHelpModal(false);
+        setShowAddTextModal(false);
         if (baseImageInputRef.current) baseImageInputRef.current.value = '';
         if (watermarkInputRef.current) watermarkInputRef.current.value = '';
     };
 
     useEffect(() => {
-        const isModalOpen = showAdjustmentPanel || showHelpModal;
+        const isModalOpen = showAdjustmentPanel || showHelpModal || showAddTextModal;
 
         const handlePopstate = (e) => {
             if (isModalOpen) {
                 e.preventDefault();
                 setShowAdjustmentPanel(false);
                 setShowHelpModal(false);
+                setShowAddTextModal(false);
             }
         };
 
@@ -511,7 +660,7 @@ const App = () => {
                 }
             }
         };
-    }, [showAdjustmentPanel, showHelpModal]);
+    }, [showAdjustmentPanel, showHelpModal, showAddTextModal]);
 
     return (
         <div className="min-h-screen bg-gray-100 p-4 sm:p-6 flex flex-col items-center font-sans relative">
@@ -577,7 +726,7 @@ const App = () => {
             </style>
 
             <h1 className="text-xl sm:text-2xl font-bold text-indigo-800 mb-2 text-center">
-                Editor de Imágenes con Marca de Agua
+                Editor de Imágenes con Marca de Agua y Texto
             </h1>
             <p className="text-lg text-indigo-600 mb-6 text-center">
                 Por: Javier Valverde Salvatierra
@@ -635,11 +784,20 @@ const App = () => {
                     ref={watermarkInputRef}
                     key={nextWatermarkId}
                 />
+                
+                <button
+                    onClick={handleAddText}
+                    className={`icon-button bg-yellow-500 hover:bg-yellow-600 ${!baseImageSrc ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    title="Añadir Texto: Agrega un nuevo texto a la imagen para personalizarla. Requiere una imagen base."
+                    disabled={!baseImageSrc}
+                >
+                    <Type size={20} />
+                </button>
 
                 <button
                     onClick={() => setShowAdjustmentPanel(prev => !prev)}
                     className="icon-button bg-blue-500 hover:bg-blue-600"
-                    title="Ajustar Marca de Agua: Abre un panel para cambiar la escala o eliminar la marca de agua seleccionada."
+                    title="Ajustar Elemento: Abre un panel para cambiar la escala, opacidad, o color del elemento seleccionado."
                 >
                     <SlidersHorizontal size={20} />
                 </button>
@@ -647,7 +805,7 @@ const App = () => {
                 <button
                     onClick={handleReset}
                     className="icon-button bg-gray-500 hover:bg-gray-600"
-                    title="Reiniciar: Borra todas las imágenes y marcas de agua, y restablece la aplicación."
+                    title="Reiniciar: Borra todas las imágenes y elementos, y restablece la aplicación."
                 >
                     <RotateCcw size={20} />
                 </button>
@@ -655,7 +813,7 @@ const App = () => {
                 <button
                     onClick={downloadImage}
                     className="icon-button bg-green-500 hover:bg-green-600"
-                    title="Descargar Imagen: Guarda la imagen base con todas las marcas de agua aplicadas."
+                    title="Descargar Imagen: Guarda la imagen base con todas las marcas de agua y texto aplicados."
                 >
                     <Download size={20} />
                 </button>
@@ -669,46 +827,105 @@ const App = () => {
                 </button>
             </div>
 
-            {showAdjustmentPanel && activeWatermark && (
-                // Fondo semitransparente para el modal, ahora bg-black/50 para que sea más notable
+            {(showAdjustmentPanel && (activeWatermark || activeText)) && (
                 <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50"
                      onClick={() => setShowAdjustmentPanel(false)}>
-                    {/* Panel de ajustes con la opacidad controlada por el estado modalOpacity */}
                     <div className="p-6 rounded-xl shadow-lg flex flex-col gap-4 w-11/12 max-w-sm"
                          style={{ backgroundColor: `rgba(255, 255, 255, ${modalOpacity})` }}
                          onClick={e => e.stopPropagation()}>
-                        <h3 className="text-xl font-semibold text-gray-700 mb-2">Ajustar Marca de Agua</h3>
-                        <div className="mb-4">
-                            <label htmlFor="watermarkScale" className="block text-gray-700 text-sm font-medium mb-2">
-                                Escala: {(activeWatermark.scale * 100).toFixed(0)}%
-                            </label>
-                            <input
-                                type="range"
-                                id="watermarkScale"
-                                min="0.05"
-                                max="1.0"
-                                step="0.01"
-                                value={activeWatermark.scale}
-                                onChange={handleWatermarkScaleChange}
-                                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                            />
-                        </div>
-                        {/* Nuevo control de opacidad para la marca de agua */}
-                        <div className="mb-4">
-                            <label htmlFor="watermarkOpacity" className="block text-gray-700 text-sm font-medium mb-2">
-                                Opacidad de la Marca de Agua: {(activeWatermark.opacity * 100).toFixed(0)}%
-                            </label>
-                            <input
-                                type="range"
-                                id="watermarkOpacity"
-                                min="0.0"
-                                max="1.0"
-                                step="0.01"
-                                value={activeWatermark.opacity}
-                                onChange={handleWatermarkOpacityChange}
-                                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                            />
-                        </div>
+                        <h3 className="text-xl font-semibold text-gray-700 mb-2">Ajustar Elemento</h3>
+                        {activeWatermark && (
+                            <>
+                                <div className="mb-4">
+                                    <label htmlFor="watermarkScale" className="block text-gray-700 text-sm font-medium mb-2">
+                                        Escala: {(activeWatermark.scale * 100).toFixed(0)}%
+                                    </label>
+                                    <input
+                                        type="range"
+                                        id="watermarkScale"
+                                        min="0.05"
+                                        max="1.0"
+                                        step="0.01"
+                                        value={activeWatermark.scale}
+                                        onChange={handleWatermarkScaleChange}
+                                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                                    />
+                                </div>
+                                <div className="mb-4">
+                                    <label htmlFor="watermarkOpacity" className="block text-gray-700 text-sm font-medium mb-2">
+                                        Opacidad de la Marca de Agua: {(activeWatermark.opacity * 100).toFixed(0)}%
+                                    </label>
+                                    <input
+                                        type="range"
+                                        id="watermarkOpacity"
+                                        min="0.0"
+                                        max="1.0"
+                                        step="0.01"
+                                        value={activeWatermark.opacity}
+                                        onChange={handleWatermarkOpacityChange}
+                                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                                    />
+                                </div>
+                            </>
+                        )}
+                        {activeText && (
+                            <>
+                                <div className="mb-4">
+                                    <label htmlFor="textContent" className="block text-gray-700 text-sm font-medium mb-2">
+                                        Contenido del Texto
+                                    </label>
+                                    <input
+                                        type="text"
+                                        id="textContent"
+                                        value={activeText.content}
+                                        onChange={handleTextContentChange}
+                                        className="w-full p-2 border border-gray-300 rounded-md shadow-sm"
+                                    />
+                                </div>
+                                <div className="mb-4">
+                                    <label htmlFor="textFontSize" className="block text-gray-700 text-sm font-medium mb-2">
+                                        Tamaño de Fuente: {activeText.fontSize}px
+                                    </label>
+                                    <input
+                                        type="range"
+                                        id="textFontSize"
+                                        min="10"
+                                        max="100"
+                                        step="1"
+                                        value={activeText.fontSize}
+                                        onChange={handleTextFontSizeChange}
+                                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                                    />
+                                </div>
+                                <div className="mb-4">
+                                    <label htmlFor="textColor" className="block text-gray-700 text-sm font-medium mb-2">
+                                        Color de Texto
+                                    </label>
+                                    <input
+                                        type="color"
+                                        id="textColor"
+                                        value={activeText.color}
+                                        onChange={handleTextColorChange}
+                                        className="w-full h-10 cursor-pointer"
+                                    />
+                                </div>
+                                <div className="mb-4">
+                                    <label htmlFor="textOpacity" className="block text-gray-700 text-sm font-medium mb-2">
+                                        Opacidad del Texto: {(activeText.opacity * 100).toFixed(0)}%
+                                    </label>
+                                    <input
+                                        type="range"
+                                        id="textOpacity"
+                                        min="0.0"
+                                        max="1.0"
+                                        step="0.01"
+                                        value={activeText.opacity}
+                                        onChange={handleTextOpacityChange}
+                                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                                    />
+                                </div>
+                            </>
+                        )}
                         {/* Control de opacidad para el panel modal */}
                         <div className="mb-4">
                             <label htmlFor="modalOpacity" className="block text-gray-700 text-sm font-medium mb-2">
@@ -726,15 +943,44 @@ const App = () => {
                             />
                         </div>
                         <button
-                            onClick={handleRemoveWatermark}
+                            onClick={handleRemoveElement}
                             className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-full shadow-md
                                        transition duration-300 ease-in-out transform hover:scale-105 flex items-center justify-center gap-2"
                         >
-                            <Trash2 size={18} /> Eliminar Marca de Agua
+                            <Trash2 size={18} /> Eliminar Elemento
                         </button>
                         <p className="text-sm text-gray-600 mt-2 text-center">
-                            Arrastra la marca de agua en la imagen para moverla.
+                            Arrastra el elemento en la imagen para moverlo.
                         </p>
+                    </div>
+                </div>
+            )}
+
+            {showAddTextModal && (
+                <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50"
+                     onClick={() => setShowAddTextModal(false)}>
+                    <div className="bg-white p-6 rounded-xl shadow-lg flex flex-col gap-4 w-11/12 max-w-sm"
+                         onClick={e => e.stopPropagation()}>
+                        <h3 className="text-xl font-semibold text-gray-700 mb-2">Añadir Texto</h3>
+                        <input
+                            type="text"
+                            className="w-full p-2 border border-gray-300 rounded-md shadow-sm"
+                            value={newTextContent}
+                            onChange={(e) => setNewTextContent(e.target.value)}
+                            placeholder="Introduce tu texto aquí..."
+                        />
+                        <button
+                            onClick={handleCreateText}
+                            className="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-4 rounded-full shadow-md"
+                        >
+                            Crear Texto
+                        </button>
+                        <button
+                            onClick={() => setShowAddTextModal(false)}
+                            className="bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-full shadow-md"
+                        >
+                            Cancelar
+                        </button>
                     </div>
                 </div>
             )}
@@ -760,22 +1006,28 @@ const App = () => {
                                     <strong className="font-semibold">Añadir Marca de Agua:</strong> Sube una o **varias imágenes** para usarlas como marcas de agua. Este botón se activa después de subir una imagen base. **Puedes añadir múltiples marcas de agua y manipularlas individualmente.**
                                 </div>
                             </li>
+                             <li className="flex items-center gap-3">
+                                <Type size={24} className="text-yellow-600 flex-shrink-0" />
+                                <div>
+                                    <strong className="font-semibold">Añadir Texto:</strong> Agrega un texto a la imagen que puedes personalizar, mover y eliminar.
+                                </div>
+                            </li>
                             <li className="flex items-center gap-3">
                                 <SlidersHorizontal size={24} className="text-blue-600 flex-shrink-0" />
                                 <div>
-                                    <strong className="font-semibold">Ajustar Marca de Agua:</strong> Abre un panel para cambiar la escala o la opacidad de la marca de agua seleccionada. Haz clic en una marca de agua en el lienzo para seleccionarla. **Puedes reubicar cualquier marca de agua arrastrándola directamente en la imagen.**
+                                    <strong className="font-semibold">Ajustar Elemento:</strong> Abre un panel para cambiar la escala, opacidad, tamaño o color del elemento (marca de agua o texto) seleccionado. Haz clic en un elemento en el lienzo para seleccionarlo. **Puedes reubicar cualquier elemento arrastrándolo directamente en la imagen.**
                                 </div>
                             </li>
                             <li className="flex items-center gap-3">
                                 <RotateCcw size={24} className="text-gray-600 flex-shrink-0" />
                                 <div>
-                                    <strong className="font-semibold">Reiniciar:</strong> Borra todas las imágenes y marcas de agua, y restablece la aplicación a su estado inicial.
+                                    <strong className="font-semibold">Reiniciar:</strong> Borra todas las imágenes y elementos, y restablece la aplicación a su estado inicial.
                                 </div>
                             </li>
                             <li className="flex items-center gap-3">
                                 <Download size={24} className="text-green-600 flex-shrink-0" />
                                 <div>
-                                    <strong className="font-semibold">Descargar Imagen:</strong> Guarda la imagen base con todas las marcas de agua aplicadas en tu dispositivo.
+                                    <strong className="font-semibold">Descargar Imagen:</strong> Guarda la imagen base con todas las marcas de agua y texto aplicados en tu dispositivo.
                                 </div>
                             </li>
                             <li className="flex items-center gap-3">
