@@ -11,7 +11,7 @@ const App = () => {
     const [activeWatermarkId, setActiveWatermarkId] = useState(null); // ID de la marca de agua actualmente seleccionada
 
     // Estados para el texto
-    const [texts, setTexts] = useState([]); // [{ id, content, x, y, fontSize, color }]
+    const [texts, setTexts] = useState([]); // [{ id, content, x, y, fontSize, color, fontFamily, opacity }]
     const [nextTextId, setNextTextId] = useState(0);
     const [activeTextId, setActiveTextId] = useState(null);
     const [newTextContent, setNewTextContent] = useState(''); // Para el input de texto del modal
@@ -46,6 +46,10 @@ const App = () => {
 
     // Usamos un Map para almacenar los límites de cada elemento (marca de agua o texto) por su ID
     const allElementBounds = useRef(new Map());
+
+    // Lista de fuentes disponibles
+    const FONT_OPTIONS = ['Inter', 'Arial', 'Verdana', 'Helvetica', 'Times New Roman', 'Georgia', 'Courier New', 'Lucida Console', 'Cursive', 'Fantasy', 'Monospace'];
+
 
     // Función auxiliar para cargar una imagen
     const loadImage = useCallback((src) => {
@@ -142,7 +146,7 @@ const App = () => {
                         currentY = initialElementY + dragOffset.dy;
                     }
 
-                    ctx.font = `${text.fontSize}px 'Inter'`;
+                    ctx.font = `${text.fontSize}px '${text.fontFamily}'`; // Usa la fuente seleccionada
                     ctx.fillStyle = text.color;
                     ctx.globalAlpha = text.opacity;
                     ctx.textAlign = 'left';
@@ -338,6 +342,7 @@ const App = () => {
                 fontSize: 30,
                 color: '#000000',
                 opacity: 1.0,
+                fontFamily: 'Inter', // Fuente predeterminada
             };
             setTexts(prev => [...prev, newText]);
             setActiveTextId(newText.id);
@@ -522,6 +527,15 @@ const App = () => {
         }
     };
 
+    const handleTextFontChange = (e) => {
+        const newFontFamily = e.target.value;
+        if (activeTextId !== null) {
+            setTexts(prevTexts => {
+                return prevTexts.map(txt => (txt.id === activeTextId) ? { ...txt, fontFamily: newFontFamily } : txt);
+            });
+        }
+    };
+
     const handleTextColorChange = (e) => {
         const newColor = e.target.value;
         if (activeTextId !== null) {
@@ -594,7 +608,7 @@ const App = () => {
                 const originalTextY = text.y / currentCanvasScaleY;
                 const originalFontSize = text.fontSize / currentCanvasScaleY;
 
-                tempCtx.font = `${originalFontSize}px 'Inter'`;
+                tempCtx.font = `${originalFontSize}px '${text.fontFamily}'`;
                 tempCtx.fillStyle = text.color;
                 tempCtx.globalAlpha = text.opacity;
                 tempCtx.textAlign = 'left';
@@ -881,6 +895,23 @@ const App = () => {
                                         onChange={handleTextContentChange}
                                         className="w-full p-2 border border-gray-300 rounded-md shadow-sm"
                                     />
+                                </div>
+                                <div className="mb-4">
+                                    <label htmlFor="textFont" className="block text-gray-700 text-sm font-medium mb-2">
+                                        Fuente
+                                    </label>
+                                    <select
+                                        id="textFont"
+                                        value={activeText.fontFamily}
+                                        onChange={handleTextFontChange}
+                                        className="w-full p-2 border border-gray-300 rounded-md shadow-sm"
+                                    >
+                                        {FONT_OPTIONS.map(font => (
+                                            <option key={font} value={font}>
+                                                {font}
+                                            </option>
+                                        ))}
+                                    </select>
                                 </div>
                                 <div className="mb-4">
                                     <label htmlFor="textFontSize" className="block text-gray-700 text-sm font-medium mb-2">
