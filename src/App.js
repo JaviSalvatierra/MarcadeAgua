@@ -93,9 +93,17 @@ const App = () => {
                 ctx.fillStyle = '#f0f0f0';
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
                 ctx.fillStyle = '#888';
-                ctx.font = '20px Inter';
+                ctx.font = '14px Inter'; // Fuente más pequeña
                 ctx.textAlign = 'center';
-                ctx.fillText('Sube una imagen base', canvas.width / 2, canvas.height / 2);
+
+                if (!baseImageSrc && watermarks.length === 0 && texts.length === 0) {
+                     // Texto dividido en dos líneas para mejor visualización en móviles
+                     ctx.fillText('Sube una imagen base', canvas.width / 2, canvas.height / 2 - 10);
+                     ctx.fillText('y luego añade marcas de agua o texto', canvas.width / 2, canvas.height / 2 + 10);
+                } else if (baseImageSrc && watermarks.length === 0 && texts.length === 0) {
+                    // Texto corto para cuando ya hay imagen base
+                    ctx.fillText('Añade una Marca de Agua o un Texto', canvas.width / 2, canvas.height / 2 + 30);
+                }
             }
 
             // Dibujar todas las marcas de agua
@@ -180,14 +188,15 @@ const App = () => {
 
             if (!baseImageSrc && watermarks.length === 0 && texts.length === 0) {
                  ctx.fillStyle = '#888';
-                 ctx.font = '16px Inter';
+                 ctx.font = '14px Inter';
                  ctx.textAlign = 'center';
-                 ctx.fillText('Sube una imagen base y luego añade marcas de agua o texto', canvas.width / 2, canvas.height / 2 + 30);
+                 ctx.fillText('Sube una imagen base', canvas.width / 2, canvas.height / 2 - 10);
+                 ctx.fillText('y luego añade marcas de agua o texto', canvas.width / 2, canvas.height / 2 + 10);
             } else if (baseImageSrc && watermarks.length === 0 && texts.length === 0) {
                 ctx.fillStyle = '#888';
-                ctx.font = '16px Inter';
+                ctx.font = '14px Inter';
                 ctx.textAlign = 'center';
-                ctx.fillText('Añade una Marca de Agua o un Texto', canvas.width / 2, canvas.height / 2 + 30);
+                ctx.fillText('Añade una Marca de Agua o un Texto', canvas.width / 2, canvas.height / 2 + 10);
             }
 
 
