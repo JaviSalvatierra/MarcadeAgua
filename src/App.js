@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 // Importa los iconos de Lucide React, incluyendo HelpCircle para el botón de ayuda y Type para el texto
-import { FileUp, ImagePlus, RotateCcw, Download, SlidersHorizontal, Trash2, HelpCircle, Type } from 'lucide-react';
+import { FileUp, ImagePlus, RotateCcw, Download, SlidersHorizontal, Trash2, HelpCircle, Type, Move } from 'lucide-react';
 
 // Componente principal de la aplicación
 const App = () => {
@@ -30,6 +30,11 @@ const App = () => {
     const [initialElementX, setInitialElementX] = useState(0);
     const [initialElementY, setInitialElementY] = useState(0);
 
+    // Estados para el arrastre del panel de ajustes
+    const [isPanelDragging, setIsPanelDragging] = useState(false);
+    const [panelPosition, setPanelPosition] = useState({ x: 0, y: 0 });
+    const [initialPanelPosition, setInitialPanelPosition] = useState({ x: 0, y: 0 });
+
     // Referencias para el arrastre y la animación
     const currentDragOffsetRef = useRef({ dx: 0, dy: 0 }); // Almacena el desplazamiento actual durante el arrastre
     const animationFrameIdRef = useRef(null); // ID del requestAnimationFrame para cancelar
@@ -44,11 +49,14 @@ const App = () => {
     // Referencia para el contenedor del canvas, que observaremos con ResizeObserver
     const canvasContainerRef = useRef(null);
 
+    // Referencia para el panel de ajustes
+    const adjustmentPanelRef = useRef(null);
+
     // Usamos un Map para almacenar los límites de cada elemento (marca de agua o texto) por su ID
     const allElementBounds = useRef(new Map());
 
     // Lista de fuentes disponibles
-    const FONT_OPTIONS = ['Inter', 'Arial', 'Verdana', 'Helvetica', 'Times New Roman', 'Georgia', 'Courier New', 'Lucida Console', 'Cursive', 'Fantasy', 'Monospace'];
+    const FONT_OPTIONS = ['Inter', 'Arial', 'Verdana', 'Helvetica', 'Times New Roman', 'Georgia', 'Courier New', 'Lucida Console', 'Cursive', 'Harrington'];
 
 
     // Función auxiliar para cargar una imagen
@@ -499,6 +507,61 @@ const App = () => {
 
     // --- Fin de funciones para arrastrar ---
 
+    // --- Funciones para arrastrar el panel de ajustes ---
+    const handlePanelDragStart = (e) => {
+        e.preventDefault();
+        setIsPanelDragging(true);
+        setInitialPanelPosition({
+            x: e.clientX - panelPosition.x,
+            y: e.clientY - panelPosition.y
+        });
+    };
+
+   // Envuelve estas funciones con useCallback
+const handlePanelDrag = useCallback((e) => {
+    if (!isPanelDragging) return;
+    
+    const newX = e.clientX - initialPanelPosition.x;
+    const newY = e.clientY - initialPanelPosition.y;
+    
+    // Limitar el movimiento dentro de la ventana
+    const maxX = window.innerWidth - (adjustmentPanelRef.current?.offsetWidth || 300);
+    const maxY = window.innerHeight - (adjustmentPanelRef.current?.offsetHeight || 400);
+    
+    setPanelPosition({
+        x: Math.max(0, Math.min(newX, maxX)),
+        y: Math.max(0, Math.min(newY, maxY))
+    });
+}, [isPanelDragging, initialPanelPosition]);
+
+const handlePanelDragEnd = useCallback(() => {
+    setIsPanelDragging(false);
+}, []);
+    // Agregar event listeners para el arrastre del panel
+
+useEffect(() => {
+    if (isPanelDragging) {
+        const handleMouseMove = (e) => handlePanelDrag(e);
+        const handleMouseUp = () => handlePanelDragEnd();
+        const handleTouchMove = (e) => handlePanelDrag(e);
+        const handleTouchEnd = () => handlePanelDragEnd();
+
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', handleMouseUp);
+        document.addEventListener('touchmove', handleTouchMove);
+        document.addEventListener('touchend', handleTouchEnd);
+
+        return () => {
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+            document.removeEventListener('touchmove', handleTouchMove);
+            document.removeEventListener('touchend', handleTouchEnd);
+        };
+    }
+}, [isPanelDragging, handlePanelDrag, handlePanelDragEnd]);
+
+    // --- Fin de funciones para arrastrar el panel ---
+
     // Funciones para ajustes
     const handleWatermarkScaleChange = (e) => {
         const newScale = Number(e.target.value);
@@ -654,6 +717,7 @@ const App = () => {
         setShowAdjustmentPanel(false);
         setShowHelpModal(false);
         setShowAddTextModal(false);
+        setPanelPosition({ x: 0, y: 0 }); // Resetear posición del panel
         if (baseImageInputRef.current) baseImageInputRef.current.value = '';
         if (watermarkInputRef.current) watermarkInputRef.current.value = '';
     };
@@ -744,6 +808,10 @@ const App = () => {
                 }
                 .icon-button:active {
                     transform: scale(0.95);
+                }
+                .draggable-panel {
+                    cursor: move;
+                    user-select: none;
                 }
                 `}
             </style>
@@ -853,10 +921,24 @@ const App = () => {
             {(showAdjustmentPanel && (activeWatermark || activeText)) && (
                 <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50"
                      onClick={() => setShowAdjustmentPanel(false)}>
-                    <div className="p-6 rounded-xl shadow-lg flex flex-col gap-4 w-11/12 max-w-sm"
-                         style={{ backgroundColor: `rgba(255, 255, 255, ${modalOpacity})` }}
+                    <div 
+                        ref={adjustmentPanelRef}
+                        className="p-6 rounded-xl shadow-lg flex flex-col gap-4 w-11/12 max-w-sm absolute"
+                         style={{ 
+                             backgroundColor: `rgba(255, 255, 255, ${modalOpacity})`,
+                             left: `${panelPosition.x}px`,
+                             top: `${panelPosition.y}px`,
+                             cursor: isPanelDragging ? 'grabbing' : 'default'
+                         }}
                          onClick={e => e.stopPropagation()}>
-                        <h3 className="text-xl font-semibold text-gray-700 mb-2">Ajustar Elemento</h3>
+                        <div 
+                            className="draggable-panel flex justify-between items-center mb-4 cursor-move"
+                            onMouseDown={handlePanelDragStart}
+                            onTouchStart={handlePanelDragStart}
+                        >
+                            <h3 className="text-xl font-semibold text-gray-700">Ajustar Elemento</h3>
+                            <Move size={20} className="text-gray-500" />
+                        </div>
                         {activeWatermark && (
                             <>
                                 <div className="mb-4">
@@ -1092,11 +1174,3 @@ const App = () => {
 };
 
 export default App;
-
-
-
-
-
-
-
-
